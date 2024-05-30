@@ -12,6 +12,10 @@ USE_OMP   = FALSE
 USE_CUDA  = FALSE
 USE_HIP   = FALSE
 
+MAX_SPEC      = 8
+MAXSPECIES := $(strip $(MAX_SPEC))
+DEFINES += -DMAX_SPECIES=$(MAXSPECIES)
+
 include $(AMREX_HOME)/Tools/GNUMake/Make.defs
 
 include ./Make.package
