@@ -1,12 +1,12 @@
 nx = 32
-max_grid_size = 1
+max_grid_size = 8
 
-nsteps = 1000
-plot_int = 1000
-ncorr = 100
+nsteps = 100000
+plot_int = 100
+ncorr = 112
 
 density = 1.0
 temperature = 1e-7
-tau = 1.1
+tau = 0.9
 
 A = 0.0
