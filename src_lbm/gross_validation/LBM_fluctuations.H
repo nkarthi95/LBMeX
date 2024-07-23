@@ -54,6 +54,7 @@ void cholesky_decomp(GpuArray<Real,nvel*nvel>& A, const int n, const int bstart)
   }
 }
 
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real fourier_laplace_operator(int kx, int ky, int kz){
   // https://www.uni-muenster.de/Physik.TP/archive/fileadmin/lehre/NumMethoden/SoSe10/Skript/Ordening.pdf
   Real out;
@@ -80,15 +81,6 @@ Real fourier_laplace_operator(int kx, int ky, int kz){
   // Print() << "kz: " << kz << " kzr:" << kzr << "\n";
   // Print() << "cs2k: " << out << "\n";
   // Print() << "kxr:" << kxr << " kyr:" << kyr << " kzr:" << kzr << " cs2k:" << out << "\n";
-  return out;
-}
-
-Real thermal_cs2(Real rho){
-  Real square_term = (rho - rhol)*(rho - rhov);
-  Real expr1 = Beta*square_term*(rhol + rhov - 6.0*rho);
-  Real expr2 = Beta*(rho - rhol)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
-  Real expr3 = Beta*(rho - rhov)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
-  Real out = -expr1 - expr2 - expr3;
   return out;
 }
 
@@ -321,6 +313,7 @@ GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz, Real rho) { //
   Xi[18*nvel+18] = -4./3.*rho0*temperature*lambda_e*(lambda_e+2.);
 
   Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*(lambda_b*lambda_e+lambda_b+lambda_e);
+  // Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*lambda_b*(lambda_b+2.);
   Xi[16*nvel+ 4] = Xi[ 4*nvel+16];
 
   return Xi;
