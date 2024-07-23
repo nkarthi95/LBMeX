@@ -2,25 +2,18 @@
 #define LBM_H_
 
 #include "LBM_d3q19.H"
-// #include "rng_functions.H"
 
 AMREX_GPU_MANAGED Real tau_r = 1.0; // What is used in Gross 2010 for all relaxation rates
-// AMREX_GPU_MANAGED Real tau_p = 1.0;
 
 AMREX_GPU_MANAGED int nx = 16;
 AMREX_GPU_MANAGED Real kappa = 0.0;
-AMREX_GPU_MANAGED Real Beta = 0.01;
+AMREX_GPU_MANAGED Real beta = 0.01;
 AMREX_GPU_MANAGED Real temperature = 0.0;
 AMREX_GPU_MANAGED Real rhov = 0.1;
 AMREX_GPU_MANAGED Real rhol = 1.1;
 
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real pressure(Real rho, Real phi);
+#include "LBM_fluctuations.H"
 
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,1> chemical_potentials(const Array1D<Real,0,1>& fields,
-				  const Array1D<RealVect,0,1>& gradients,
-				  const Array1D<Real,0,1>& laplacians);
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -61,29 +54,12 @@ Real laplacian(int x, int y, int z, const Array4<Real>& field, int icomp) {
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,1> chemical_potentials(const Array1D<Real,0,1>& fields,
-				  const Array1D<RealVect,0,1>& gradients,
-				  const Array1D<Real,0,1>& laplacians) {
-  
-  const Real rho = fields(0);
-  const Real D2rho = laplacians(0);
-
-  Array1D<Real,0,1> mu = {0.0} ;
-  // mu(0) = lambda/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho; //This is most definitely wrong for the multiphase case
-
-  // Real square_term = (rho - rhol)*(rho - rhov);
-  Real mu_0 = Beta*pow(rho - rhol, 2)*(2*rho - 2*rhov) + Beta*pow(rho - rhov, 2)*(2*rho - 2*rhol);
-  mu(0) = mu_0 - kappa*D2rho;
-  Print() << "Chemical Potential: " << mu(0) << "\n";
-
-  return mu;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho) {
-  Real p0 = 0.0;
-  Real square_term = (rho - rhol)*(rho - rhov);
-  p0 += Beta*(square_term*(2*rho*(2*rho - rhol - rhov) - square_term)); // eq 2 and para after in Gross 1010
+  const Real dl = rho - rhol;
+  const Real dv = rho - rhov;
+
+  Real p0 = beta*dl*dv*(2.*rho*(dl+dv) - dl*dv);
+
   return p0;
 }
 
@@ -203,44 +179,21 @@ void relax_moments(int x, int y, int z,
 
   const Array1D<RealVect,0,1> gradients = {gradient(x,y,z,h,0)};
   const Array1D<Real,0,1> laplacians = {laplacian(x,y,z,h,0)};
-  // const Array1D<Real,0,1> mu = chemical_potentials(fields, gradients, laplacians);
 
-  Array1D<Real,0,nvel> mfEq;
-  mfEq = fequilibrium_moments(fields, gradients, laplacians, u);
+  const Array1D<Real,0,nvel> mfEq = fequilibrium_moments(fields, gradients, laplacians, u);
 
   for (int i=0; i<nvel; ++i) {
-    // Real L;
-    // if (i < ncons){L = 0.0;}
-    // else{L = -1./tau_r;}
-    const Real L = -1./tau_r; 
-    mf(i) = mf(i) + L*(mf(i) - mfEq(i));
+    mf(i) = mf(i) - 1./tau_r*(mf(i) - mfEq(i));
   }
 
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-void thermalize_moments(Array1D<Real,0,nvel>& mf,
-			RandomEngine const& engine) {
-  const Real rho = mf(0);
-  const Real gamma_r = 1. - 1./tau_r;
-  const Real system_cs2 = Beta*pow(rhol - rhov, 2);
-  const Real phi_r = sqrt(rho*temperature/system_cs2*(1.-gamma_r*gamma_r));
-  Array<Real,nvel> r = {}; // {} to value initialize r
-  for (int i=4; i<nvel; ++i) {
-    mf(i) += sqrt(b[i])*phi_r*RandomNormal(0., 1., engine);
-  }
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void thermalize_moments(int x, int y, int z,
       Array1D<Real,0,nvel>& mf,
       const Array4<Real>& noise) {
-  // diffusive moments 1,2,3 in noise at 5,6,7
-  // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
   for (int i=ncons; i<nvel; ++i) {
-    // Print() << noise(x,y,z,i) << " on index " << i << "\n";
-    // mf(i) += (1. - 0.5/tau_r) * noise(x,y,z,i); //might have to correct for time discretization here. Check in Gross paper once everything else isn't broken
-    mf(i) += noise(x,y,z,i); //might have to correct for time discretization here. Check in Gross paper once everything else isn't broken
+    mf(i) += noise(x,y,z,i);
   }
 }
 
@@ -345,12 +298,10 @@ inline void LBM_timestep(const Geometry& geom,
        MultiFab& noise,
        MultiFab& rho0) {
   
-  if (temperature > 0.0) {generate_fluctuations(geom, hydrovs, noise, rho0);}
-  else {noise.setVal(0.);}
-  // Print() << "Noise generated for moments\n";
+  generate_fluctuations(geom, noise);
   collide_stream(geom, fold, fnew, hydrovs, noise);
-  // Print() << "Collide stream completed\n";
   hydrovars(fold, hydrovs);
+
 }
 
 // homogeneous mixture of C1 and C2 with random concentration fluctuations
@@ -424,7 +375,7 @@ inline void LBM_init_flat_interface(const Geometry& geom,
           }
       }
 
-    });
+  });
   hydrovars(mf, hydrovs);
 }
 
@@ -445,15 +396,14 @@ inline void LBM_init_droplet(const Real r,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-  #if (AMREX_SPACEDIM == 2)
-      const Real r2 = rx*rx+ry*ry;
-  #elif (AMREX_SPACEDIM == 3)
-      const Real rz = z-box[0]/2;
-      const Real r2 = rx*rx+ry*ry+rz*rz;
-  #endif
-      const Real r = sqrt(r2);
-      const Real profile = tanh((R-r)/sqrt(kappa));
-
+#if (AMREX_SPACEDIM == 2)
+    const Real r2 = rx*rx+ry*ry;
+#elif (AMREX_SPACEDIM == 3)
+    const Real rz = z-box[0]/2;
+    const Real r2 = rx*rx+ry*ry+rz*rz;
+#endif
+    const Real r = sqrt(r2);
+    const Real profile = tanh((R-r)/sqrt(kappa));
       for (int i=0; i<nvel; i++) {
         if (profile < 0.0){
           f[nbx](x,y,z,i) = w[i]*rhol;
@@ -465,8 +415,8 @@ inline void LBM_init_droplet(const Real r,
           }
       }
 
-    });
-    hydrovars(mf, hydrovs);
+  });
+  hydrovars(mf, hydrovs);
 }
 
 #endif
