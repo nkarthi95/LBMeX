@@ -12,7 +12,7 @@ AMREX_GPU_MANAGED Real temperature = 0.0;
 AMREX_GPU_MANAGED Real rhov = 0.1;
 AMREX_GPU_MANAGED Real rhol = 1.1;
 
-#include "LBM_fluctuations.H"
+// #include "LBM_fluctuations.H"
 
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -27,16 +27,6 @@ RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
     }
   }
   return gradient;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real thermal_cs2(Real rho){
-  Real square_term = (rho - rhol)*(rho - rhov);
-  Real expr1 = Beta*square_term*(rhol + rhov - 6.0*rho);
-  Real expr2 = Beta*(rho - rhol)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
-  Real expr3 = Beta*(rho - rhov)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
-  Real out = -expr1 - expr2 - expr3;
-  return out;
 }
 
 #include "LBM_fluctuations.H"
@@ -298,7 +288,7 @@ inline void LBM_timestep(const Geometry& geom,
        MultiFab& noise,
        MultiFab& rho0) {
   
-  generate_fluctuations(geom, noise);
+  generate_fluctuations(geom, noise, hydrovs, rho0);
   collide_stream(geom, fold, fnew, hydrovs, noise);
   hydrovars(fold, hydrovs);
 

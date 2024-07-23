@@ -61,10 +61,11 @@ inline Vector<std::string> VariableNames(const int numVars) {
 
 inline void WriteOutput(int step,
 			const MultiFab& hydrovs,
-			const Geometry& geom) {
+			const Geometry& geom,
+      std::string plt_name) {
   // set up variable names for output
   const Vector<std::string> var_names = VariableNames(nvel);
-  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,7);
+  const std::string& pltfile = amrex::Concatenate(plt_name,step,7);
   WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
 }
 
@@ -74,7 +75,8 @@ void main_driver(const char* argv) {
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
-    
+  std::string plt_name;
+
   // default grid parameters
   int nx = 16;
   int max_grid_size = 8;
@@ -141,7 +143,7 @@ void main_driver(const char* argv) {
     }
   else if (init_cond == 1){
     LBM_init_mixture(fold, hydrovs, rho0);
-    rho0 = 0.5*rhol + 0.5*rhov;
+    // rho0 = 0.5*rhol + 0.5*rhov;
     }
   else if (init_cond == 2){
     LBM_init_flat_interface(geom, fold, hydrovs, rho0);
@@ -152,7 +154,7 @@ void main_driver(const char* argv) {
     }
   Print() << "Data structures generated\n";
   const Vector<std::string> rho0_varname = VariableNames(1);
-  WriteSingleLevelPlotfile("reference_densities", rho0, rho0_varname, geom, Real(0), 0);
+  WriteSingleLevelPlotfile("reference_densities_plt", rho0, rho0_varname, geom, Real(0), 0);
 
   int nStructVars = 10;
   const Vector<std::string> var_names = VariableNames(nStructVars);
@@ -167,7 +169,7 @@ void main_driver(const char* argv) {
   // Print() << "Initial condition created\n";
 
   // Write a plotfile of the initial data if plot_int > 0
-  if (plot_int > 0) {WriteOutput(0, hydrovs, geom);}
+  if (plot_int > 0) {WriteOutput(0, hydrovs, geom, "hydro_plt");}
   // Print() << "LB initialized\n";
 
   // TIMESTEP
@@ -188,7 +190,7 @@ void main_driver(const char* argv) {
   }
 
   // structFact.WritePlotFile(nsteps, nsteps, geom, "SF_plt");
-  structFact.WritePlotFile(nsteps, static_cast<Real>(nsteps), geom, "SF_plt");
+  // structFact.WritePlotFile(nsteps, static_cast<Real>(nsteps), geom, "SF_plt");
   // Call the timer again and compute the maximum difference between the start time 
   // and stop time over all processors
   Real stop_time = ParallelDescriptor::second() - strt_time;
