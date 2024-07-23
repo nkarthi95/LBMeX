@@ -267,8 +267,8 @@ GpuArray<Real,ncomp*ncomp> noise_covariance_ideal(int kx, int ky, int kz) {
 
 // construct noise covariance matrix of the modes in k-space
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz, Real rho) { // TODO: add function arguments: rho, phi, k, others?
-  const Real rho0 = rhol;
+GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz, Real rho, Real rho0) { // TODO: add function arguments: rho, phi, k, others?
+  // const Real rho0 = rhol;
   const Real lambda_s = -1.0/tau_r;
   const Real lambda_b = lambda_s;
   const Real lambda_o = lambda_s;
@@ -276,19 +276,20 @@ GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz, Real rho) { //
 
   const Real k2 = fourier_laplace_operator(kx, ky, kz);
   // Print() << "kx: " << kx << " ky: " << ky << " kz: " << kz << " k2: " << k2 << "\n";
-  // const Real k2 = 0.0;
+  // const Real k2 = ((Real)kx*(Real)kx + (Real)ky*(Real)ky + (Real)kz*(Real)kz)/(3*(Real)nx*(Real)nx);
+  // const Real k2 = 1.0;
   // Print() << "kx: " << kx_conv << " ky:" << ky_conv << " kz:" << kz_conv << "\n";
 
   // const Real system_cs2 = 2.*rho0*Beta*pow(rhol - rhov, 2);
   const Real system_cs2 = thermal_cs2(rho);
-  const Real cs2_k = system_cs2 + rho*kappa*k2;
+  const Real cs2_k = system_cs2 + rho0*kappa*k2;
   // Print() << "k dependent cs2: " << cs2_k << "\n";
  
  // Noise covariance of the modes in k-space
   GpuArray<Real,nvel*nvel> Xi = {};
   Xi.fill(0);
 
-  Xi[ 4*nvel+ 4] = -rho0*temperature*(5.-9.*cs2)*lambda_b*(lambda_b+2.);
+  Xi[ 4*nvel+ 4] = -rho0*temperature*(5.-9.*cs2_k)*lambda_b*(lambda_b+2.);
   Xi[ 5*nvel+ 5] = -4.*rho0*temperature*lambda_s*(lambda_s+2.);
   Xi[ 6*nvel+ 6] = -4./3.*rho0*temperature*lambda_s*(lambda_s+2.);
   Xi[ 7*nvel+ 7] = -1./3.*rho0*temperature*lambda_s*(lambda_s+2.);
@@ -308,11 +309,11 @@ GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz, Real rho) { //
   Xi[13*nvel+13] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
   Xi[14*nvel+14] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
   Xi[15*nvel+15] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
-  Xi[16*nvel+16] = -9.*rho0*temperature*(1-cs2)*lambda_e*(lambda_e+2.);
+  Xi[16*nvel+16] = -9.*rho0*temperature*(1-cs2_k)*lambda_e*(lambda_e+2.);
   Xi[17*nvel+17] = -4.*rho0*temperature*lambda_e*(lambda_e+2.);
   Xi[18*nvel+18] = -4./3.*rho0*temperature*lambda_e*(lambda_e+2.);
 
-  Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*(lambda_b*lambda_e+lambda_b+lambda_e);
+  Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2_k-1.)*(lambda_b*lambda_e+lambda_b+lambda_e);
   // Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*lambda_b*(lambda_b+2.);
   Xi[16*nvel+ 4] = Xi[ 4*nvel+16];
 
@@ -343,36 +344,14 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,nvel> correlated_noise(int kx, int ky, int kz,
 						   const Box& domain,
 						   const RandomEngine& engine,
-               const Real rho) {
+               const Real rho,
+               const Real rho0) {
   GpuArray<GpuComplex<Real>,nvel> r, xi;
   GpuArray<Real,nvel*nvel> C;
 
   // Cholesky decomposition of noise covariance matrix
-  C = noise_covariance(kx,ky,kz,rho);
-
-  // Print() << "Xi diag 4: " << C[ 4*nvel+ 4] << "\n";
-  // Print() << "Xi diag 5: " << C[ 5*nvel+ 5] << "\n";
-  // Print() << "Xi diag 6: " << C[ 6*nvel+ 6] << "\n";
-  // Print() << "Xi diag 7: " << C[ 7*nvel+ 7] << "\n";
-  // Print() << "Xi diag 10: " << C[ 10*nvel+ 10] << "\n";
-  // Print() << "Xi diag 13: " << C[ 13*nvel+ 13] << "\n";
-  // Print() << "Xi diag 16: " << C[ 16*nvel+ 16] << "\n";
-  // Print() << "Xi diag 17: " << C[ 17*nvel+ 17] << "\n";
-  // Print() << "Xi diag 18: " << C[ 18*nvel+ 18] << "\n";
-  // Print() << "Xi off diag 4,16: " << C[ 4*nvel+16] << "\n";
-
+  C = noise_covariance(kx,ky,kz,rho, rho0);
   cholesky_decomp(C,nvel,ncons);
-  // Print() << "After decomposition" << "\n";
-  // Print() << "Xi diag 4: " << C[ 4*nvel+ 4] << "\n";
-  // Print() << "Xi diag 5: " << C[ 5*nvel+ 5] << "\n";
-  // Print() << "Xi diag 6: " << C[ 6*nvel+ 6] << "\n";
-  // Print() << "Xi diag 7: " << C[ 7*nvel+ 7] << "\n";
-  // Print() << "Xi diag 10: " << C[ 10*nvel+ 10] << "\n";
-  // Print() << "Xi diag 13: " << C[ 13*nvel+ 13] << "\n";
-  // Print() << "Xi diag 16: " << C[ 16*nvel+ 16] << "\n";
-  // Print() << "Xi diag 17: " << C[ 17*nvel+ 17] << "\n";
-  // Print() << "Xi diag 18: " << C[ 18*nvel+ 18] << "\n";
-  // Print() << "Xi off diag 4,16: " << C[ 4*nvel+16] << "\n";
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
   // possibly the case if C(k) != C(-k) [uschill 07/27/2022]
@@ -396,7 +375,8 @@ GpuArray<GpuComplex<Real>,nvel> correlated_noise(int kx, int ky, int kz,
 inline void generate_kspace_noise(const Geometry& geom,
 				  MultiFab& kspace_noise_real,
 				  MultiFab& kspace_noise_imag,
-          MultiFab& hydrovs) {
+          MultiFab& hydrovs,
+          MultiFab& rho0) {
   const Box domain = geom.Domain();
 
   // include density? [uschill 07/26/2022]
@@ -410,6 +390,7 @@ inline void generate_kspace_noise(const Geometry& geom,
     const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
     const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
+    const Array4<Real>& r = rho0.array(mfi);
     // construct noise in k-space
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
       if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
@@ -417,7 +398,8 @@ inline void generate_kspace_noise(const Geometry& geom,
 
 	      // compute correlated noise in k-space
         const Real rho = h(kx, ky, kz, 0);
-	      xi = correlated_noise(kx,ky,kz,domain,engine,rho);
+        const Real rho0 = r(kx, ky, kz, 0);
+	      xi = correlated_noise(kx,ky,kz,domain,engine,rho,rho0);
 
         for (int i=0; i<nvel; ++i) {
           xi_real(kx,ky,kz,i) = xi[i].real();
@@ -656,7 +638,8 @@ inline void compute_ifft(const Geometry& geom, MultiFab& realspace_noise,
 // LB thermalization procedure for spatially correlated, non-diagonal noise
 inline void generate_fluctuations(const Geometry& geom,
 				  MultiFab& hydrovs,
-				  MultiFab& noise) {
+				  MultiFab& noise,
+          MultiFab& rho0) {
   BoxArray ba = noise.boxArray();
   DistributionMapping dm = noise.DistributionMap();
   MultiFab kspace_noise_real(ba, dm, nvel, 0);
@@ -668,7 +651,7 @@ inline void generate_fluctuations(const Geometry& geom,
   // TODO: check if this takes care of nvel entries!?
 
   // generate noise in k-space
-  generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, hydrovs);
+  generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, hydrovs, rho0);
   // Print() << "k space noise generated\n";
 
   // note that the k-space noise is generated without the required symmetries
