@@ -265,7 +265,7 @@ GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz) { // TODO: add
   GpuArray<Real,nvel*nvel> Xi = {};
   Xi.fill(0);
 
-  Xi[ 4*nvel+ 4] = -rho0*temperature*(5.-9.*cs2)*lambda_b*(lambda_b+2.);
+  Xi[ 4*nvel+ 4] = -rho0*temperature*(5.-9.*cs2_k)*lambda_b*(lambda_b+2.);
   Xi[ 5*nvel+ 5] = -4.*rho0*temperature*lambda_s*(lambda_s+2.);
   Xi[ 6*nvel+ 6] = -4./3.*rho0*temperature*lambda_s*(lambda_s+2.);
   Xi[ 7*nvel+ 7] = -1./3.*rho0*temperature*lambda_s*(lambda_s+2.);
@@ -277,11 +277,12 @@ GpuArray<Real,nvel*nvel> noise_covariance(int kx, int ky, int kz) { // TODO: add
   Xi[13*nvel+13] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
   Xi[14*nvel+14] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
   Xi[15*nvel+15] = -2./3.*rho0*temperature*lambda_o*(lambda_o+2.);
-  Xi[16*nvel+16] = -9.*rho0*temperature*(1-cs2)*lambda_e*(lambda_e+2.);
+  Xi[16*nvel+16] = -9.*rho0*temperature*(1-cs2_k)*lambda_e*(lambda_e+2.);
   Xi[17*nvel+17] = -4.*rho0*temperature*lambda_e*(lambda_e+2.);
   Xi[18*nvel+18] = -4./3.*rho0*temperature*lambda_e*(lambda_e+2.);
 
-  Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*(lambda_b*lambda_e+lambda_b+lambda_e);
+  Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2_k-1.)*(lambda_b*lambda_e+lambda_b+lambda_e);
+  // Xi[ 4*nvel+16] = -3.*rho0*temperature*(3.*cs2-1.)*lambda_b*(lambda_b+2.);
   Xi[16*nvel+ 4] = Xi[ 4*nvel+16];
 
   return Xi;
@@ -315,7 +316,6 @@ GpuArray<GpuComplex<Real>,nvel> correlated_noise(int kx, int ky, int kz,
 
   // Cholesky decomposition of noise covariance matrix
   C = noise_covariance(kx,ky,kz);
-
   cholesky_decomp(C,nvel,ncons);
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
@@ -358,7 +358,6 @@ inline void generate_kspace_noise(const Geometry& geom,
 
 	      // compute correlated noise in k-space
 	      xi = correlated_noise(kx,ky,kz,domain,engine);
-
         for (int i=0; i<nvel; ++i) {
           xi_real(kx,ky,kz,i) = xi[i].real();
           xi_imag(kx,ky,kz,i) = xi[i].imag();

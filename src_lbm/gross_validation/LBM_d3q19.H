@@ -1,10 +1,9 @@
 #ifndef LBM_D3Q19_H_
 #define LBM_D3Q19_H_
 
-// #include "LBM_binary.H"
+#include "LBM_binary.H"
 
 const int nvel = 19;
-
 const Real cs2 = 1./3.;
 
 AMREX_GPU_MANAGED IntVect c[19] = {
@@ -290,12 +289,14 @@ Array1D<Real,0,nvel> hydrovars(const Array1D<Real,0,nvel>& m) {
   if (m(0) > std::numeric_limits<Real>::epsilon()) {
     const Real rho = m(0);
     const RealVect j = { m(1), m(2), m(3) };
-    h(4) -= rho*cs2 + j[0]*j[0]/rho;
+    Real pb = rho*cs2;
+    // Real pb = pressure(rho);
+    h(4) -= pb + j[0]*j[0]/rho;
     h(5) -= j[0]*j[1]/rho;
     h(6) -= j[0]*j[2]/rho;
-    h(7) -= rho*cs2 + j[1]*j[1]/rho;
+    h(7) -= pb + j[1]*j[1]/rho;
     h(8) -= j[1]*j[2]/rho;
-    h(9) -= rho*cs2 + j[2]*j[2]/rho;
+    h(9) -= pb + j[2]*j[2]/rho;
   }
 
   return h;

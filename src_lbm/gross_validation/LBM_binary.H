@@ -14,6 +14,7 @@ AMREX_GPU_MANAGED Real rhol = 1.1;
 
 #include "LBM_fluctuations.H"
 
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
   RealVect gradient = { 0.0, 0.0, 0.0 };
@@ -27,6 +28,18 @@ RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
   }
   return gradient;
 }
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real thermal_cs2(Real rho){
+  Real square_term = (rho - rhol)*(rho - rhov);
+  Real expr1 = Beta*square_term*(rhol + rhov - 6.0*rho);
+  Real expr2 = Beta*(rho - rhol)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
+  Real expr3 = Beta*(rho - rhov)*(2.0*rho*(-2.0*rho + rhol + rhov) + square_term);
+  Real out = -expr1 - expr2 - expr3;
+  return out;
+}
+
+#include "LBM_fluctuations.H"
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real laplacian(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -281,7 +294,9 @@ inline void hydrovars(MultiFab& mf, MultiFab& hydrovs) {
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold,
 			 MultiFab& fnew,
-			 MultiFab& hydrovs, MultiFab& noise) {
+			 MultiFab& hydrovs, 
+       MultiFab& noise,
+       MultiFab& rho0) {
   
   generate_fluctuations(geom, noise);
   collide_stream(geom, fold, fnew, hydrovs, noise);
@@ -291,14 +306,16 @@ inline void LBM_timestep(const Geometry& geom,
 
 // homogeneous mixture of C1 and C2 with random concentration fluctuations
 inline void LBM_init_liquid(MultiFab& mf,
-			     MultiFab& hydrovs) {
+			     MultiFab& hydrovs, MultiFab& rho0) {
   // const Real C1 = 0.5*rhol + 0.5*rhov;
   const Real C1 = rhol;
   for (MFIter mfi(mf); mfi.isValid(); ++mfi) {
     const Box& valid_box = mfi.validbox();
     const Array4<Real>& f = mf.array(mfi);
+    const Array4<Real>& r = rho0.array(mfi);
     ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
       const Real rho = C1;
+      r(x, y, z, 0) = rho;
       for (int i=0; i<nvel; i++) {
         f(x,y,z,i) = w[i]*rho;
       }
@@ -308,7 +325,7 @@ inline void LBM_init_liquid(MultiFab& mf,
 }
 
 // homogeneous mixture of C1 and C2 with random concentration fluctuations
-inline void LBM_init_mixture(MultiFab& mf, MultiFab& hydrovs) {
+inline void LBM_init_mixture(MultiFab& mf, MultiFab& hydrovs, MultiFab& rho0) {
 
   const Real perturbation = 0.00001;
   const Real C1 = 0.5*rhol + 0.5*rhov;
@@ -316,9 +333,11 @@ inline void LBM_init_mixture(MultiFab& mf, MultiFab& hydrovs) {
   for (MFIter mfi(mf); mfi.isValid(); ++mfi) {
     const Box& valid_box = mfi.validbox();
     const Array4<Real>& f = mf.array(mfi);
+    const Array4<Real>& r = rho0.array(mfi);
     ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+      const Real rho = C1 +  RandomNormal(0., perturbation, engine);
+      r(x, y, z, 0) = rho;
       for (int i=0; i<nvel; i++) {
-        const Real rho = C1 +  RandomNormal(0., perturbation, engine);
         f(x,y,z,i) = w[i]*rho;
       }
     });
@@ -329,24 +348,32 @@ inline void LBM_init_mixture(MultiFab& mf, MultiFab& hydrovs) {
 // flat interface between C1 and C2
 inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mf,
-				    MultiFab& hydrovs) {
+				    MultiFab& hydrovs,
+            MultiFab& rho0) {
   const IntVect box = geom.Domain().length();
   auto const & f = mf.arrays();
+  auto const & r = rho0.arrays();
   GpuArray<Real,3> dx = geom.CellSizeArray();
+
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-#if (AMREX_SPACEDIM == 2)
-    const Real r2 = rx*rx+ry*ry;
-#elif (AMREX_SPACEDIM == 3)
-    const Real rz = z-box[0]/2;
-    const Real r2 = rx*rx+ry*ry+rz*rz;
-#endif
-
-    for (int i=0; i<nvel; i++) {
-      if (rx < 0.){f[nbx](x,y,z,i) = w[i]*rhol;}
-      else{f[nbx](x,y,z,i) = w[i]*rhov;}
-    }
+  #if (AMREX_SPACEDIM == 2)
+      const Real r2 = rx*rx+ry*ry;
+  #elif (AMREX_SPACEDIM == 3)
+      const Real rz = z-box[0]/2;
+      const Real r2 = rx*rx+ry*ry+rz*rz;
+  #endif
+      for (int i=0; i<nvel; i++) {
+        if (rx < 0.){
+          f[nbx](x,y,z,i) = w[i]*rhol;
+          r[nbx](x, y, z, 0) = rhol;
+          }
+        else{
+          f[nbx](x,y,z,i) = w[i]*rhov;
+          r[nbx](x, y, z, 0) = rhov;
+          }
+      }
 
   });
   hydrovars(mf, hydrovs);
@@ -356,12 +383,14 @@ inline void LBM_init_flat_interface(const Geometry& geom,
 inline void LBM_init_droplet(const Real r,
 			     const Geometry& geom,
 			     MultiFab& mf,
-			     MultiFab& hydrovs) {
+			     MultiFab& hydrovs,
+           MultiFab& rho0) {
 
   const IntVect box = geom.Domain().length();
   const Real R = r*box[0];
 
   auto const & f = mf.arrays();
+  auto const & r0 = rho0.arrays();
   GpuArray<Real,3> dx = geom.CellSizeArray();
 
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
@@ -375,11 +404,16 @@ inline void LBM_init_droplet(const Real r,
 #endif
     const Real r = sqrt(r2);
     const Real profile = tanh((R-r)/sqrt(kappa));
-
-    for (int i=0; i<nvel; i++) {
-      if (profile < 0.0){f[nbx](x,y,z,i) = w[i]*rhol;}
-      else {f[nbx](x,y,z,i) = w[i]*rhov;}
-    }
+      for (int i=0; i<nvel; i++) {
+        if (profile < 0.0){
+          f[nbx](x,y,z,i) = w[i]*rhol;
+          r0[nbx](x, y, z, 0) = rhol;
+          }
+        else {
+          f[nbx](x,y,z,i) = w[i]*rhov;
+          r0[nbx](x, y, z, 0) = rhov;
+          }
+      }
 
   });
   hydrovars(mf, hydrovs);

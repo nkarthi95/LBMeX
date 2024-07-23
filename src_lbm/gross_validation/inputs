@@ -1,7 +1,7 @@
 # box dims
-nx = 16
-max_grid_size = 16
-init_cond = 0
+nx = 32
+max_grid_size = 32
+init_cond = 2
 
 # timesteps
 nsteps = 4000
@@ -9,8 +9,8 @@ plot_int = 400
 
 # model_params
 kappa = 0.03
-B = 0.015
-rhov = 0.1
+B = 0.04
+rhov = 0.5
 rhol = 1.0
 
 # fluctuations
