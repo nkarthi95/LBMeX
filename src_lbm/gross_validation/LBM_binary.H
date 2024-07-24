@@ -6,6 +6,8 @@
 AMREX_GPU_MANAGED Real tau_r = 1.0; // What is used in Gross 2010 for all relaxation rates
 
 AMREX_GPU_MANAGED int nx = 16;
+AMREX_GPU_MANAGED int ny = 16;
+AMREX_GPU_MANAGED int nz = 16;
 AMREX_GPU_MANAGED Real kappa = 0.0;
 AMREX_GPU_MANAGED Real beta = 0.01;
 AMREX_GPU_MANAGED Real temperature = 0.0;

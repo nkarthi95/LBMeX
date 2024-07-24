@@ -58,7 +58,7 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real fourier_laplace_operator(int ikx, int iky, int ikz){
   // https://www.uni-muenster.de/Physik.TP/archive/fileadmin/lehre/NumMethoden/SoSe10/Skript/Ordening.pdf
   Real k2;
-  std::vector<int> n = {nx, nx, nx};
+  std::vector<int> n = {nx, ny, nz};
   Real dpi = 2.*M_PI;
   
   Real kx = (ikx <= (n[0]-1)/2) ? dpi/n[0]*ikx : 2.*M_PI/n[0]*(ikx-n[0]);

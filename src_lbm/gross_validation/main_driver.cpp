@@ -93,6 +93,8 @@ void main_driver(const char* argv) {
   // input parameters
   ParmParse pp;
   pp.query("nx", nx);
+  pp.query("ny", ny);
+  pp.query("nz", nz);
   pp.query("max_grid_size", max_grid_size);
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
@@ -107,7 +109,7 @@ void main_driver(const char* argv) {
   Print() << "parameters parsed\n";
   // set up Box and Geomtry
   IntVect dom_lo(0, 0, 0);
-  IntVect dom_hi(nx-1, nx-1, nx-1);
+  IntVect dom_hi(nx-1, ny-1, nz-1);
   Array<int,3> periodicity({1,1,1});
 
   Box domain(dom_lo, dom_hi);
