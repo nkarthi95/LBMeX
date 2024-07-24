@@ -86,6 +86,7 @@ void main_driver(const char* argv) {
   // default time stepping parameters
   int nsteps = 100;
   int plot_int = 10;
+  int skip_record_time = 0;
 
   // fft test input
   int reps = 1;
@@ -98,6 +99,7 @@ void main_driver(const char* argv) {
   pp.query("max_grid_size", max_grid_size);
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
+  pp.query("skip_record_time", skip_record_time);
   pp.query("kappa", kappa);
   pp.query("rhov", rhov);
   pp.query("rhol", rhol);
@@ -177,7 +179,8 @@ void main_driver(const char* argv) {
   // TIMESTEP
   for (int step=1; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, fnew, hydrovs, noise, rho0);
-    if (plot_int > 0 && step%plot_int ==0) {
+    if (step >= skip_record_time){
+      if (plot_int > 0 && step%plot_int ==0) {
       plt_name = "hydro_plt";
       WriteOutput(step, hydrovs, geom, plt_name);
       plt_name = "xi_plt";
@@ -187,7 +190,8 @@ void main_driver(const char* argv) {
       structFact.FortStructure(hydrovs, geom);
       // WriteCheckpointFile()
       }
-    structFact.FortStructure(hydrovs, geom);
+      structFact.FortStructure(hydrovs, geom);
+    }
     Print() << "LB step " << step << "\n";
   }
 
