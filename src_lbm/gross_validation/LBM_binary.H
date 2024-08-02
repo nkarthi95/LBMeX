@@ -184,8 +184,12 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void thermalize_moments(int x, int y, int z,
       Array1D<Real,0,nvel>& mf,
       const Array4<Real>& noise) {
+  const Real gamma = 1. - 1./tau_r;
+  const Real time_discretization = sqrt(0.5)*(1 + gamma);
+  // Real time_discretization = 1. + 1./(2.*tau_r);
+  // time_discretization = sqrt(time_discretization);
   for (int i=ncons; i<nvel; ++i) {
-    mf(i) += noise(x,y,z,i);
+    mf(i) += time_discretization*noise(x,y,z,i);
   }
 }
 
@@ -388,26 +392,26 @@ inline void LBM_init_droplet(const Real r,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-#if (AMREX_SPACEDIM == 2)
-    const Real r2 = rx*rx+ry*ry;
-#elif (AMREX_SPACEDIM == 3)
-    const Real rz = z-box[0]/2;
-    const Real r2 = rx*rx+ry*ry+rz*rz;
-#endif
-    const Real r = sqrt(r2);
-    const Real profile = tanh((R-r)/sqrt(kappa));
-      for (int i=0; i<nvel; i++) {
-        if (profile < 0.0){
-          f[nbx](x,y,z,i) = w[i]*rhol;
-          r0[nbx](x, y, z, 0) = rhol;
+    #if (AMREX_SPACEDIM == 2)
+        const Real r2 = rx*rx+ry*ry;
+    #elif (AMREX_SPACEDIM == 3)
+        const Real rz = z-box[0]/2;
+        const Real r2 = rx*rx+ry*ry+rz*rz;
+    #endif
+        const Real r = sqrt(r2);
+        const Real profile = tanh((R-r)/sqrt(kappa));
+          for (int i=0; i<nvel; i++) {
+            if (profile < 0.0){
+              f[nbx](x,y,z,i) = w[i]*rhol;
+              r0[nbx](x, y, z, 0) = rhol;
+              }
+            else {
+              f[nbx](x,y,z,i) = w[i]*rhov;
+              r0[nbx](x, y, z, 0) = rhov;
+              }
           }
-        else {
-          f[nbx](x,y,z,i) = w[i]*rhov;
-          r0[nbx](x, y, z, 0) = rhov;
-          }
-      }
 
-  });
+      });
   hydrovars(mf, hydrovs);
 }
 
