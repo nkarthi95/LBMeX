@@ -11,7 +11,7 @@ plot_int = 400
 skip_record_time = 1000
 
 # model_params
-kappa = 0.08
+kappa = 0.0
 B = 0.14
 rhov = 0.5
 rhol = 1.0
