@@ -6,8 +6,8 @@ max_grid_size = 16
 init_cond = 0
 
 # timesteps
-nsteps = 10000
-plot_int = 400
+nsteps = 2000
+plot_int = 500
 skip_record_time = 1000
 
 # model_params

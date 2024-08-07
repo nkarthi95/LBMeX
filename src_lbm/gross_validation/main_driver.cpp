@@ -138,6 +138,13 @@ void main_driver(const char* argv) {
   MultiFab hydrovs(ba, dm, nvel, nghost);
   MultiFab noise(ba, dm, nvel, nghost);
   MultiFab rho0(ba, dm, 1, nghost);
+  MultiFab scaling(ba, dm, 1, nghost);
+  scaling.setVal(1.0);
+  for (MFIter mfi(scaling); mfi.isValid(); ++mfi){
+    const Array4<Real>& scale = scaling.array(mfi);
+    scale(nx/2, ny/2, nz/2, 0) = (pow(nx, 3))/temperature;
+  }
+
   // MultiFab ic_setup(ba, dm, nvel, nghost);
   // MultiFab test_noise(ba, dm, 2*nvel, nghost);
   // Real rho0;
@@ -185,10 +192,10 @@ void main_driver(const char* argv) {
       WriteOutput(step, hydrovs, geom, plt_name);
       plt_name = "xi_plt";
       WriteOutput(step, noise, geom, plt_name);
+      // structFact.divide(scale, 0, 1, nghost);
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", 0);
       StructFact structFact(ba, dm, var_names, var_scaling);
       structFact.FortStructure(hydrovs, geom);
-      // WriteCheckpointFile()
       }
       structFact.FortStructure(hydrovs, geom);
     }
