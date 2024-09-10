@@ -7,12 +7,12 @@
 #include "StructFact.H"
 using namespace amrex;
 #include "LBM_binary.H"
-#include "tests.H"
+// #include "tests.H"
 #include "LBM_IO.H"
 
 void main_driver(const char* argv) {
   // fft_test();
-  test_case_ifft();
+  // test_case_ifft();
   // if (!cholesky_test(100)) exit(-1);
 
   // store the current time so we can later compute total run time.

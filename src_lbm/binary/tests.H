@@ -1,6 +1,6 @@
-#include "LBM_fluctuations.H"
-#include "LBM_IO.H"
-#include <math.h> 
+// #include "LBM_fluctuations.H"
+// #include "LBM_IO.H"
+// #include <math.h> 
 
 GpuArray<Real,ndof*ndof> square_matrix(GpuArray<Real,ndof*ndof> const& L) {
     GpuArray<Real,ndof*ndof> C = {};
