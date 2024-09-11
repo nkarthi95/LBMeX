@@ -74,7 +74,7 @@ void compute_fft(const Geometry& geom,
 			    int NVAR,
           bool unpack){
 
-    BL_PROFILE_VAR("StructFact::ComputeFFT()", ComputeFFT);
+    BL_PROFILE_VAR("compute_fft()", compute_fft);
 
     #ifdef AMREX_USE_CUDA
         // Print() << "Using cuFFT\n";
@@ -759,11 +759,10 @@ GpuArray<GpuComplex<Real>,ndof*ndof> noise_covariance(int kx, int ky, int kz, co
   const Real lambda_p = 1./tau_p;
 
   // TODO: generalize to non-homogeneous reference state
-  // const Real rho0 = 1.0;
-  // const Real phi0 = 0.0;
-  // const Real rho0 = r(kx, ky, kz, 0);
+  // const Real rho0 = r(kx, ky, kz, 0); //homogenous case
+  // const Real phi0 = r(kx, ky, kz, 1); //homogenous case
   const Real rho0 = 1.0;
-  // const Real phi0 = r(kx, ky, kz, 1);
+  // const GpuComplex<Real> rho0= {real(kx, ky, kz, 0), imag(kx, kx, kz, 0)};
   const GpuComplex<Real> phi0= {real(kx, ky, kz, 1), imag(kx, kx, kz, 1)};
   // if (kx < nx/2){Real phi = 0.5;}else(phi)
   // assuming no k dependence so kappa = 0
