@@ -747,8 +747,9 @@ GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const
   return r;
 }
 
-GpuArray<GpuComplex<Real>,ndof*ndof> noise_covariance(int kx, int ky, int kz, const Box& domain, 
-                                        const Array4<Real>& real, const Array4<Real>& imag) { // TODO: add function arguments: rho, phi, k, others?
+GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz, const Box& domain, 
+                                        const Array4<Real>& r, const Array4<Real>& ref_real, 
+                                        const Array4<Real>& ref_imag) { // TODO: add function arguments: rho, phi, k, others?
   BL_PROFILE_VAR("noise_covariance()",noise_covariance);
   const int Q = nvel;
   const Real kT = temperature;
@@ -759,20 +760,32 @@ GpuArray<GpuComplex<Real>,ndof*ndof> noise_covariance(int kx, int ky, int kz, co
   const Real lambda_p = 1./tau_p;
 
   // TODO: generalize to non-homogeneous reference state
-  // const Real rho0 = r(kx, ky, kz, 0); //homogenous case
-  // const Real phi0 = r(kx, ky, kz, 1); //homogenous case
-  const Real rho0 = 1.0;
   // const GpuComplex<Real> rho0= {real(kx, ky, kz, 0), imag(kx, kx, kz, 0)};
-  const GpuComplex<Real> phi0= {real(kx, ky, kz, 1), imag(kx, kx, kz, 1)};
+  // const GpuComplex<Real> phi0= {real(kx, ky, kz, 1), imag(kx, kx, kz, 1)};
   // if (kx < nx/2){Real phi = 0.5;}else(phi)
   // assuming no k dependence so kappa = 0
-  const Real cs2k = T + kappa*k2*rho0; //checked after conversion
-  const GpuComplex<Real> mu_rho = (-2.*T*pow(rho0, 4) - chi*pow(phi0, 4) + chi*pow(phi0*rho0, 2))/(2.*pow(rho0, 3)*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
-  const GpuComplex<Real> mu_phi = (-2.*T*pow(rho0, 2) - chi*pow(phi0, 2) + chi*pow(rho0, 2))/(2.*rho0*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
-  const Real p_C = k2*kappa; //checked after conversion
+  // const Real cs2k = T + kappa*k2*rho0; //checked after conversion
+  // const GpuComplex<Real> mu_rho = (-2.*T*pow(rho0, 4) - chi*pow(phi0, 4) + chi*pow(phi0*rho0, 2))/(2.*pow(rho0, 3)*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
+  // const GpuComplex<Real> mu_phi = (-2.*T*pow(rho0, 2) - chi*pow(phi0, 2) + chi*pow(rho0, 2))/(2.*rho0*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
+  // const Real p_C = k2*kappa; //checked after conversion
   
-  GpuArray<GpuComplex<Real>,ndof*ndof> Xi = {};
-  Xi.fill({0., 0.});
+  // GpuArray<GpuComplex<Real>,ndof*ndof> Xi = {};
+  // Xi.fill({0., 0.});
+
+  // TODO: generalize to non-homogeneous reference state
+  const Real rho0 = r(kx, ky, kz, 0); //homogenous case
+  const Real conv = (pow(ref_real(kx, ky, kz, 1), 2) + pow(ref_imag(kx, kx, kz, 1), 2));//(pow(nx*ny*nz, 1));
+  const Real phi0 = r(kx, ky, kz, 1) + conv;
+
+  if(ky == 0 and kz == 0){Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " phi:" << phi0 << " rho:" << rho0 << " convolution:" << conv << "\n";}
+
+  const Real cs2k = T + kappa*k2*rho0 + kappa*k2*phi0; //checked after conversion
+  const Real mu_rho = (-2.*T*pow(rho0, 4) - chi*pow(phi0, 4) + chi*pow(phi0*rho0, 2))/(2.*pow(rho0, 3)*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
+  const Real mu_phi = (-2.*T*pow(rho0, 2) - chi*pow(phi0, 2) + chi*pow(rho0, 2))/(2.*rho0*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
+  const Real p_C = k2*kappa*phi0; //checked after conversion
+  
+  GpuArray<Real,ndof*ndof> Xi = {};
+  Xi.fill(0.);
 
   // diagonal part sector
   Xi[195] = 2.*Gamma*kT*lambda_p/rho0;
@@ -847,36 +860,38 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
 						   const Box& domain,
 						   const RandomEngine& engine,
+               const Array4<Real>& hydrovs_ref,
                const Array4<Real>& real_ref,
                const Array4<Real>& imag_ref) {
   BL_PROFILE_VAR("correlated_noise()",correlated_noise);
   GpuArray<GpuComplex<Real>,ndof> r, xi;
-  GpuArray<GpuComplex<Real>,ndof*ndof> C;
+  GpuArray<Real,ndof*ndof> C;
+  // GpuArray<GpuComplex<Real>,ndof*ndof> C;
 
   // // Cholesky decomposition of noise covariance matrix
-  C = noise_covariance(kx,ky,kz,domain,real_ref,imag_ref);
-  cholesky_decomp(C,ndof,ncons);
+  C = noise_covariance(kx,ky,kz,domain,hydrovs_ref,real_ref,imag_ref);
+  // cholesky_decomp(C,ndof,ncons);
 
   // // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
-  // const char uplo = 'L';
-  // const int lda = ndof-ncons;
-  // const int order = lda;
-  // int info = 0;
-  // GpuArray<GpuComplex<Real>,lda*lda> SLC_C; SLC_C.fill(0.);
-  // for (int i = ncons; i < ndof; i++){
-  //   for (int j = ncons; j < ndof; j++){
-  //     SLC_C[(i-ncons)*lda+(j-ncons)] = C[i*ndof+j];
-  //   }
-  // }
-  // size_t arraySize = SLC_C.size();
-  // // dpotrf_(&uplo, &order, SLC_C.data(), &lda, &info, arraySize);
+  const char uplo = 'L';
+  const int lda = ndof-ncons;
+  const int order = lda;
+  int info = 0;
+  GpuArray<Real,lda*lda> SLC_C; SLC_C.fill(0.);
+  for (int i = ncons; i < ndof; i++){
+    for (int j = ncons; j < ndof; j++){
+      SLC_C[(i-ncons)*lda+(j-ncons)] = C[i*ndof+j];
+    }
+  }
+  size_t arraySize = SLC_C.size();
+  dpotrf_(&uplo, &order, SLC_C.data(), &lda, &info, arraySize);
   // zpotrf_(&uplo, &order, SLC_C.data(), &lda, &info, arraySize);
-  // C.fill(0.);
-  // for (int i = ncons; i < ndof; i++){
-  //   for (int j = ncons; j < i+1; j++){
-  //     C[i*ndof+j] = SLC_C[(j-ncons)*lda+(i-ncons)];
-  //   }
-  // }
+  C.fill(0.);
+  for (int i = ncons; i < ndof; i++){
+    for (int j = ncons; j < i+1; j++){
+      C[i*ndof+j] = SLC_C[(j-ncons)*lda+(i-ncons)];
+    }
+  }
   // // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
@@ -920,7 +935,7 @@ inline void generate_kspace_noise(const Geometry& geom,
     const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
     const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
-    // const Array4<Real>& r = ref_params.array(mfi);
+    const Array4<Real>& r = ref_params.array(mfi);
     const Array4<Real>& fft_real = variables_dft_real.array(mfi);
     const Array4<Real>& fft_imag = variables_dft_imag.array(mfi);
 
@@ -929,7 +944,7 @@ inline void generate_kspace_noise(const Geometry& geom,
       if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
         GpuArray<GpuComplex<Real>,ndof> xi = {};
 	      // compute correlated noise in k-space
-	      xi = correlated_noise(kx,ky,kz,domain,engine,fft_real,fft_imag);
+	      xi = correlated_noise(kx,ky,kz,domain,engine,r,fft_real,fft_imag);
 
         for (int i=0; i<ndof; ++i) {
           xi_real(kx,ky,kz,i) = xi[i].real();
