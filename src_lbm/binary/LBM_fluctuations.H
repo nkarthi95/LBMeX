@@ -773,11 +773,13 @@ GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz, const Box& dom
   // Xi.fill({0., 0.});
 
   // TODO: generalize to non-homogeneous reference state
-  const Real rho0 = r(kx, ky, kz, 0); //homogenous case
-  const Real conv = (pow(ref_real(kx, ky, kz, 1), 2) + pow(ref_imag(kx, kx, kz, 1), 2));//(pow(nx*ny*nz, 1));
-  const Real phi0 = r(kx, ky, kz, 1) + conv;
+  const Real rho_conv = (pow(ref_real(kx, ky, kz, 0), 2) + pow(ref_imag(kx, kx, kz, 0), 2)); //normalization is performed during the fft
+  const Real rho0 = r(kx, ky, kz, 0) + rho_conv;
+  const Real phi_conv = (pow(ref_real(kx, ky, kz, 1), 2) + pow(ref_imag(kx, kx, kz, 1), 2)); //normalization is performed during the fft
+  const Real phi0 = r(kx, ky, kz, 1) + phi_conv;
 
-  if(ky == 0 and kz == 0){Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " phi:" << phi0 << " rho:" << rho0 << " convolution:" << conv << "\n";}
+  if(ky == 0 and kz == 0){Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " phi:" << phi0 << " convolution:" << phi_conv << "\n";
+                          Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " rho:" << rho0 << " convolution:" << rho_conv << "\n";}
 
   const Real cs2k = T + kappa*k2*rho0 + kappa*k2*phi0; //checked after conversion
   const Real mu_rho = (-2.*T*pow(rho0, 4) - chi*pow(phi0, 4) + chi*pow(phi0*rho0, 2))/(2.*pow(rho0, 3)*(pow(phi0, 2) - pow(rho0, 2))) + k2*kappa;
