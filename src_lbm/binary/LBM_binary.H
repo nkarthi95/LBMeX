@@ -174,8 +174,8 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   mEq( 2) = rho*u[1];
   mEq( 3) = rho*u[2];
 
-  // mEq( 4) = 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho*u2 - 0.5*traceG - rho;
-  mEq( 4) = 3.*(pbulk-1.5*kappa*(rho*D2rho+phi*D2phi)) + rho*u2 - 0.25*traceG - rho;
+  mEq( 4) = 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho*u2 - 0.5*traceG - rho;
+  // mEq( 4) = 3.*(pbulk-1.5*kappa*(rho*D2rho+phi*D2phi)) + rho*u2 - 0.25*traceG - rho;
   mEq( 5) = rho*(3.*u[0]*u[0]-u2) + (3.*G[0][0]-traceG);
   mEq( 6) = rho*(u[1]*u[1]-u[2]*u[2]) + (G[1][1]-G[2][2]);
   mEq( 7) = rho*u[0]*u[1] + G[0][1];
@@ -189,8 +189,8 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   mEq(14) = 0.;
   mEq(15) = 0.;
 
-  // mEq(16) = 1.5*traceG - 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho;
-  mEq(16) = -0.75*traceG - 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho;
+  mEq(16) = 1.5*traceG - 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho;
+  // mEq(16) = -0.75*traceG - 3.*(pbulk-kappa*(rho*D2rho+phi*D2phi)) + rho;
   mEq(17) = 2.*(G[1][1]+G[2][2]-2.*G[0][0]);
   mEq(18) = 2.*(G[2][2]-G[1][1]);
 
