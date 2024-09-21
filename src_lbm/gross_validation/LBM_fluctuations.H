@@ -9,7 +9,7 @@
 #endif
 #include <AMReX_GpuComplex.H>
 #include <math.h>
-
+#include <lapacke.h>
 #include "LBM_d3q19.H"
 #include "LBM_binary.H"
 
@@ -345,7 +345,28 @@ GpuArray<GpuComplex<Real>,nvel> correlated_noise(int kx, int ky, int kz,
 
   // Cholesky decomposition of noise covariance matrix
   C = noise_covariance(kx,ky,kz,rho,rho0);
-  cholesky_decomp(C,nvel,ncons);
+  // cholesky_decomp(C,nvel,ncons);
+  // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
+  const char uplo = 'L';
+  const int lda = nvel-ncons;
+  const int order = lda;
+  int info = 0;
+  GpuArray<Real,lda*lda> SLC_C; SLC_C.fill(0.);
+  for (int i = ncons; i < nvel; i++){
+    for (int j = ncons; j < nvel; j++){
+      SLC_C[(i-ncons)*lda+(j-ncons)] = C[i*nvel+j];
+    }
+  }
+  size_t arraySize = SLC_C.size();
+  dpotrf_(&uplo, &order, SLC_C.data(), &lda, &info, arraySize);
+  // zpotrf_(&uplo, &order, SLC_C.data(), &lda, &info, arraySize);
+  C.fill(0.);
+  for (int i = ncons; i < nvel; i++){
+    for (int j = ncons; j < i+1; j++){
+      C[i*nvel+j] = SLC_C[(j-ncons)*lda+(i-ncons)];
+    }
+  }
+  // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
   // possibly the case if C(k) != C(-k) [uschill 07/27/2022]

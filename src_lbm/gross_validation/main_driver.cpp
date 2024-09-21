@@ -190,8 +190,8 @@ void main_driver(const char* argv) {
       if (plot_int > 0 && step%plot_int ==0) {
       plt_name = "hydro_plt";
       WriteOutput(step, hydrovs, geom, plt_name);
-      plt_name = "xi_plt";
-      WriteOutput(step, noise, geom, plt_name);
+      // plt_name = "xi_plt";
+      // WriteOutput(step, noise, geom, plt_name);
       // structFact.divide(scale, 0, 1, nghost);
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", 0);
       StructFact structFact(ba, dm, var_names, var_scaling);
