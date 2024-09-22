@@ -2,11 +2,11 @@
 nx = 20
 ny = 4
 nz = 200
-max_grid_size = 200
+max_grid_size = 50
 init_cond = 1
 
 # time parameters
-nsteps = 10000
+nsteps = 2000
 dump_hydro = 1
 n_hydro = 100
 dump_SF = 0
