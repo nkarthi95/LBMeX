@@ -1,18 +1,18 @@
 # box parameters
 nx = 20
-ny = 4
+ny = 2
 nz = 200
 max_grid_size = 50
-init_cond = 1
+init_cond = 10
 
 # time parameters
-nsteps = 2000
-dump_hydro = 1
+nsteps = 200
+n_sci_start = 0
+dump_hydro = 0
 n_hydro = 100
 dump_SF = 0
 n_SF = 200
-n_checkpoint = 0
-start_step = 0
+start_step = 100
 output_hdf5 = 1
 
 # model parameters

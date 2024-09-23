@@ -29,12 +29,12 @@ void main_driver(const char* argv) {
   Real R = 0.3;
 
   // default time stepping parameters
+  int n_sci_start = 0;
   int nsteps = 100;
   int dump_hydro = 1;
   int n_hydro = 10;
   int dump_SF = 1;
   int n_SF = 10;
-  int n_checkpoint = nsteps;
   int start_step = 0;
   int output_hdf = 0;
 
@@ -51,6 +51,8 @@ void main_driver(const char* argv) {
 
   // plot parameters
   pp.query("nsteps", nsteps);
+  int n_checkpoint = nsteps;
+  pp.query("n_sci_start", n_sci_start);
   pp.query("dump_hydro", dump_hydro);
   pp.query("n_hydro", n_hydro);
   pp.query("dump_SF", dump_SF);
@@ -89,6 +91,7 @@ void main_driver(const char* argv) {
   MultiFab hydrovs(ba, dm, 2*nvel, nghost);
   MultiFab noise(ba, dm, 2*nvel, nghost);
   MultiFab ref_params(ba, dm, 2, nghost); //reference rho and C for each point of the lattice
+  MultiFab mf_checkpoint(ba, dm, 2*nvel+2, nghost);
 
   // structure factor stuff
   int nStructVars = 5;
@@ -111,17 +114,23 @@ void main_driver(const char* argv) {
       LBM_init_droplet(R, geom, fold, gold, hydrovs, ref_params);
       break;
     case 10:
-      checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
-      const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
-      bool test_file_path = file_exists(checkpointname);
-      if (test_file_path and temperature > 0){
-        StructFact structFact;
-        structFact.ReadCheckPoint(SF_chk,ba,dm);
-      }
+      // checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
+      checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
+      ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
+      // const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
+      // bool test_file_path = file_exists(checkpointname);
+      // if (test_file_path and temperature > 0){
+      //   StructFact structFact;
+      //   structFact.ReadCheckPoint(SF_chk,ba,dm);
+      // }
       break;
   }
 
-  if (n_checkpoint > 0 && ic != 10){WriteCheckPoint(start_step, hydrovs, hydro_chk);start_step = 0;}
+  if (n_checkpoint > 0 && ic != 10){
+    // ParallelCopy(mf_checkpoint, hydrovs, 0, 2*nvel, 2*nvel,);
+    mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
+    mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
+    WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;}
   // checkpoint read of hydrovs to generate fold and gold to be used for further simulations
 
   // hydrovs.Copy(ref_params, hydrovs, 0, 0, 2, nghost);
@@ -134,11 +143,16 @@ void main_driver(const char* argv) {
   for (int step=start_step; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, ref_params);
 
+    if (step >= n_sci_start){
+
     if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
 
     if (n_checkpoint > 0 && step%n_checkpoint == 0){
-      WriteCheckPoint(step, hydrovs, hydro_chk);
-      if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
+      // WriteCheckPoint(step, hydrovs, hydro_chk);
+      mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
+      mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
+      WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;
+      // if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
     }
     
     if (dump_hydro == 1 && step%n_hydro == 0){WriteOutput(step, hydrovs, geom, hydro_plt, output_hdf);}
@@ -147,7 +161,7 @@ void main_driver(const char* argv) {
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);
       StructFact structFact(ba, dm, var_names, var_scaling);
       }
-
+    }
     // if (plot_int > 0 && step%plot_int ==0) {
     //   WriteOutput(step, hydrovs, geom, hydro_plt);
     //   if (temperature > 0){

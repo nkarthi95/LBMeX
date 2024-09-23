@@ -477,9 +477,7 @@ inline void LBM_timestep(const Geometry& geom,
 }
 
 // Newton-Raphson method function
-Real newtonRaphson(Real initialGuess, 
-                     double tolerance, 
-                     int maxIterations) {
+Real fb(Real initialGuess, double tolerance, int maxIterations) {
     Real x = initialGuess;
     for (int i = 0; i < maxIterations; ++i) {
         Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
@@ -540,9 +538,11 @@ inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mg,
 				    MultiFab& hydrovs,
             MultiFab& ref_params) {
+  
   const IntVect box = geom.Domain().length();
-
-  const Real b = -(pow(chi, 2.350)/(pow(kappa, 0.640)*pow(T, 5.559)*489.435));
+  Real phi0 = fb(0.6, pow(10, -7), 1000);
+  const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+  // const Real b = -(pow(chi, 2.350)/(pow(kappa, 0.640)*pow(T, 5.559)*489.435));
   const Real intLoc = (Real(box[0]) - 1.)/2.;
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -557,24 +557,24 @@ inline void LBM_init_flat_interface(const Geometry& geom,
       const Real rz = z-box[0]/2;
       const Real r2 = rx*rx+ry*ry+rz*rz;
   #endif
-
+      Real factor = 1.;
       const Real rho=1.0;
-      Real phi0 = newtonRaphson(0.6, pow(10, -7), 1000);
       r[nbx](x, y, z, 0) = 1.;
-      r[nbx](x, y, z, 1) = phi0*tanh(b*(Real(x) - intLoc));
+      // r[nbx](x, y, z, 1) = phi0*tanh(b*(Real(x) - intLoc));
+      r[nbx](x, y, z, 1) = -phi0*tanh((Real(x) - intLoc)/xi);
       // Print() << "intLoc:"<< intLoc << " " << Real(x) <<": " << phi0*tanh(b*(Real(x) - intLoc)) << "\n";
       // // Print() << "Initial phi: " << phi << "\n";
       if (rx < 0.) {
         // phi = (1. + 0.49)/2.;
-        phi0 *= 1.;
+        factor = 1.;
       } else {
         // phi = (1. - 0.49)/2.;
-        phi0 *= -1.;
+        factor = -1.;
       }
       
       for (int i=0; i<nvel; i++) {
         f[nbx](x,y,z,i) = w[i]*rho;
-        g[nbx](x,y,z,i) = w[i]*phi0;
+        g[nbx](x,y,z,i) = w[i]*phi0*factor;
       }
 
     });
@@ -588,8 +588,12 @@ inline void LBM_init_droplet(const Real r,
 			     MultiFab& mg,
 			     MultiFab& hydrovs,
            MultiFab& ref_params) {
-  const IntVect box = geom.Domain().length();
-  const Real R = r*box[0];
+    
+    const IntVect box = geom.Domain().length();
+    const Real R = r*box[0];
+
+    Real phi0 = fb(0.6, pow(10, -7), 1000);
+    const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
 
     auto const & f = mf.arrays();
     auto const & g = mg.arrays();
@@ -607,8 +611,10 @@ inline void LBM_init_droplet(const Real r,
       const Real r = sqrt(r2);
 
       const Real rho = 1.0;
-      const Real phi0 = newtonRaphson(0.505, pow(10, -7), 1000);;
-      const Real phi = phi0*tanh((R-r)/sqrt(kappa));
+      // const Real phi0 = fb(0.6, pow(10, -7), 1000);;
+      // const Real phi = phi0*tanh((R-r)/sqrt(kappa));
+
+      const Real phi = -phi0*tanh((R-r)/xi);
       ref[nbx](x, y, z, 0) = rho;
       ref[nbx](x, y, z, 1) = phi;
       // Real phi = 0.0;

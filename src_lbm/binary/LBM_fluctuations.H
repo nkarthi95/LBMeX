@@ -774,6 +774,7 @@ GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz, const Box& dom
   // TODO: generalize to non-homogeneous reference state
   // const Real rho_conv = (pow(ref_real(kx, ky, kz, 0), 2) + pow(ref_imag(kx, kx, kz, 0), 2)); //normalization is performed during the fft
   const Real rho0 = r(kx, ky, kz, 0);// + rho_conv;
+  // const Real rho0 = 1.0;// + rho_conv;
   // const Real phi_conv = (pow(ref_real(kx, ky, kz, 1), 2) + pow(ref_imag(kx, kx, kz, 1), 2)); //normalization is performed during the fft
   const Real phi0 = r(kx, ky, kz, 1);// + phi_conv;
 
