@@ -8,12 +8,12 @@ init_cond = 10
 # time parameters
 nsteps = 200
 n_sci_start = 0
-dump_hydro = 0
+dump_hydro = 1
 n_hydro = 100
 dump_SF = 0
 n_SF = 200
 start_step = 100
-output_hdf5 = 1
+output_hdf5 = 0
 
 # model parameters
 lambda = 1.1

@@ -151,7 +151,7 @@ void main_driver(const char* argv) {
       // WriteCheckPoint(step, hydrovs, hydro_chk);
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
-      WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;
+      WriteCheckPoint(step, mf_checkpoint, hydro_chk);
       // if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
     }
     
