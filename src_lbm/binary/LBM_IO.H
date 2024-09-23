@@ -73,9 +73,10 @@ inline void WriteOutput(int step,
 			const MultiFab& hydrovs,
 			const Geometry& geom,
       const std::string pltname,
+      int nvar,
       int output_hdf) {
   // set up variable names for output
-  const Vector<std::string> var_names = VariableNames(2*nvel);
+  const Vector<std::string> var_names = VariableNames(nvar);
   const std::string& pltfile = amrex::Concatenate(pltname,step,7);
   if(output_hdf){WriteSingleLevelPlotfileHDF5(pltfile, hydrovs, var_names, geom, Real(step), step);}
   else{WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
@@ -346,13 +347,8 @@ void checkpointRestart(int& step, MultiFab& hydrovs, const std::string pltname, 
         mf(i) = h(x,y,z,i+4);
         mg(i) = h(x,y,z,i+nvel);
       }
-      // Print() << "rho: " << rho << " phi: " << phi << "\n";
-      f_dist = populations(mf); //this functions converts from f moments to f distribution
-      g_dist = populations(mg); //this functions converts from g moments to g distribution
-      for(int i = 0; i < nvel; i++){
-        f(x,y,z,i) = f_dist(i);
-        g(x,y,z,i) = g_dist(i);
-      }
+      populations(x,y,z,f,mf);
+      populations(x,y,z,g,mg);
     });
   }
 }

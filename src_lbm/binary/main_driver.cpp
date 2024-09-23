@@ -21,8 +21,8 @@ void main_driver(const char* argv) {
   const std::string SF_plt = "SF_plt";
   const std::string hydro_chk = "chk_hydro_";
   const std::string SF_chk = "chk_SF_";
+  const std::string ref_plt = "ref_plt_";
   const Vector<std::string> v = VariableNames(2);
-  const std::string& checkpointname = amrex::Concatenate("ref_params_",0,7);
 
   // default grid parameters
   int nx = 16; int ny = 16; int nz = 16;
@@ -118,8 +118,9 @@ void main_driver(const char* argv) {
     case 10:
       // checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
       checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
+      hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
-      WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(start_step), start_step);
+      // WriteOutput(start_step, ref_params, geom, ref_plt, 2, output_hdf);
       // const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
       // bool test_file_path = file_exists(checkpointname);
       // if (test_file_path and temperature > 0){
@@ -134,12 +135,13 @@ void main_driver(const char* argv) {
     mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
     mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
     WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;
-    WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(start_step), start_step);}
+    WriteOutput(start_step, ref_params, geom, ref_plt, 2, output_hdf);
+    }
   // checkpoint read of hydrovs to generate fold and gold to be used for further simulations
 
   // hydrovs.Copy(ref_params, hydrovs, 0, 0, 2, nghost);
   // Write a plotfile of the initial data if plot_int > 0
-  if (dump_hydro == 1 and ic != 10){WriteOutput(start_step, hydrovs, geom, hydro_plt, output_hdf);}
+  if (dump_hydro == 1){WriteOutput(start_step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);}
   Print() << "LB initialized\n";
   start_step++;
 
@@ -156,11 +158,9 @@ void main_driver(const char* argv) {
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);
-      WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(step), step);
-      // if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
     }
     
-    if (dump_hydro == 1 && step%n_hydro == 0){WriteOutput(step, hydrovs, geom, hydro_plt, output_hdf);}
+    if (dump_hydro == 1 && step%n_hydro == 0){WriteOutput(step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);}
 
     if(dump_SF == 1 && step%n_SF == 0 && temperature > 0){
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);

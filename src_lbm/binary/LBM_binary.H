@@ -541,7 +541,7 @@ inline void LBM_init_flat_interface(const Geometry& geom,
   
   const IntVect box = geom.Domain().length();
   Real phi0 = fb(0.6, pow(10, -7), 1000);
-  const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+  const Real xi = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi0*phi0)));
   // const Real b = -(pow(chi, 2.350)/(pow(kappa, 0.640)*pow(T, 5.559)*489.435));
   const Real intLoc = (Real(box[0]) - 1.)/2.;
   auto const & f = mf.arrays();
@@ -561,7 +561,8 @@ inline void LBM_init_flat_interface(const Geometry& geom,
       const Real rho=1.0;
       r[nbx](x, y, z, 0) = 1.;
       // r[nbx](x, y, z, 1) = phi0*tanh(b*(Real(x) - intLoc));
-      r[nbx](x, y, z, 1) = -phi0*tanh((Real(x) - intLoc)/xi);
+      Real phi_ref = -phi0*tanh((Real(x) - intLoc)/xi);
+      r[nbx](x, y, z, 1) = phi_ref;
       // Print() << "intLoc:"<< intLoc << " " << Real(x) <<": " << phi0*tanh(b*(Real(x) - intLoc)) << "\n";
       // // Print() << "Initial phi: " << phi << "\n";
       if (rx < 0.) {
