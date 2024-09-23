@@ -20,12 +20,13 @@ void main_driver(const char* argv) {
   const std::string hydro_plt = "hydro_plt_";
   const std::string SF_plt = "SF_plt";
   const std::string hydro_chk = "chk_hydro_";
-  const std::string SF_chk = "chk_SF_";
   const std::string ref_plt = "ref_plt_";
-  const Vector<std::string> v = VariableNames(2);
 
   // default grid parameters
   int nx = 16; int ny = 16; int nz = 16;
+  int max_grid_size_x = 8;
+  int max_grid_size_y = 8;
+  int max_grid_size_z = 8;
   int max_grid_size = 8;
   int ic = 0;
   Real R = 0.3;
@@ -47,6 +48,9 @@ void main_driver(const char* argv) {
   pp.query("ny", ny);
   pp.query("nz", nz);
   pp.query("max_grid_size", max_grid_size);
+  pp.query("max_grid_size_x", max_grid_size_x);
+  pp.query("max_grid_size_y", max_grid_size_y);
+  pp.query("max_grid_size_z", max_grid_size_z);
   pp.query("init_cond", ic);
   pp.query("nz", nz);
   pp.query("R", R);
@@ -67,8 +71,11 @@ void main_driver(const char* argv) {
   pp.query("kappa", kappa);
   pp.query("lambda", chi);
   pp.query("T", T);
-  pp.query("temperature", temperature);
   pp.query("gamma", Gamma);
+
+  // fluctuations
+  pp.query("temperature", temperature);
+  pp.query("correlated_noise", use_correlated_noise);
 
   // set up Box and Geomtry
   IntVect dom_lo(0, 0, 0);
@@ -79,7 +86,10 @@ void main_driver(const char* argv) {
   Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);
   BoxArray ba(domain);
   // split BoxArray into chunks no larger than "max_grid_size" along a direction
-  ba.maxSize(max_grid_size);
+  if(max_grid_size_x != max_grid_size_y or max_grid_size_y != max_grid_size_x or max_grid_size_y != max_grid_size_z){
+    IntVect max_grid_size = {max_grid_size_x, max_grid_size_y, max_grid_size_z};
+    ba.maxSize(max_grid_size);}
+  else{ba.maxSize(max_grid_size);}
   DistributionMapping dm(ba);
   // need two halo layers for gradients
   int nghost = 2;
@@ -121,12 +131,6 @@ void main_driver(const char* argv) {
       hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
       // WriteOutput(start_step, ref_params, geom, ref_plt, 2, output_hdf);
-      // const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
-      // bool test_file_path = file_exists(checkpointname);
-      // if (test_file_path and temperature > 0){
-      //   StructFact structFact;
-      //   structFact.ReadCheckPoint(SF_chk,ba,dm);
-      // }
       break;
   }
 
@@ -154,7 +158,6 @@ void main_driver(const char* argv) {
     if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
 
     if (n_checkpoint > 0 && step%n_checkpoint == 0){
-      // WriteCheckPoint(step, hydrovs, hydro_chk);
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);
@@ -167,13 +170,6 @@ void main_driver(const char* argv) {
       StructFact structFact(ba, dm, var_names, var_scaling);
       }
     }
-    // if (plot_int > 0 && step%plot_int ==0) {
-    //   WriteOutput(step, hydrovs, geom, hydro_plt);
-    //   if (temperature > 0){
-    //     // WriteOutput(step, noise, geom, "xi_plt"); 
-    //     structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0); // remove 0 if k = 0 point is to be zeroed in output
-    //     StructFact structFact(ba, dm, var_names, var_scaling);}
-    // }
     Print() << "LB step " << step << " completed\n";
   }
   // Call the timer again and compute the maximum difference between the start time 

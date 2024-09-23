@@ -4,15 +4,15 @@ ny = 2
 nz = 768
 max_grid_size_x = 12
 max_grid_size_y = 2
-max_grid_size_z = 192
-init_cond = 1
+max_grid_size_z = 64
+init_cond = 10
 
 # time parameters
-nsteps = 1000
+nsteps = 1500
 n_sci_start = 0
-n_hydro = 100
+n_hydro = 500
 dump_SF = 0
-start_step = 0
+start_step = 1000
 output_hdf5 = 1
 
 # model parameters
