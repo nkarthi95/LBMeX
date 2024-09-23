@@ -21,6 +21,8 @@ void main_driver(const char* argv) {
   const std::string SF_plt = "SF_plt";
   const std::string hydro_chk = "chk_hydro_";
   const std::string SF_chk = "chk_SF_";
+  const Vector<std::string> v = VariableNames(2);
+  const std::string& checkpointname = amrex::Concatenate("ref_params_",0,7);
 
   // default grid parameters
   int nx = 16; int ny = 16; int nz = 16;
@@ -117,6 +119,7 @@ void main_driver(const char* argv) {
       // checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
       checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
+      WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(start_step), start_step);
       // const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
       // bool test_file_path = file_exists(checkpointname);
       // if (test_file_path and temperature > 0){
@@ -127,10 +130,11 @@ void main_driver(const char* argv) {
   }
 
   if (n_checkpoint > 0 && ic != 10){
-    // ParallelCopy(mf_checkpoint, hydrovs, 0, 2*nvel, 2*nvel,);
+    // WriteCheckPoint(start_step, hydrovs, hydro_chk);start_step = 0;
     mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
     mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
-    WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;}
+    WriteCheckPoint(start_step, mf_checkpoint, hydro_chk);start_step = 0;
+    WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(start_step), start_step);}
   // checkpoint read of hydrovs to generate fold and gold to be used for further simulations
 
   // hydrovs.Copy(ref_params, hydrovs, 0, 0, 2, nghost);
@@ -152,6 +156,7 @@ void main_driver(const char* argv) {
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);
+      WriteSingleLevelPlotfileHDF5(checkpointname, ref_params, v, geom, Real(step), step);
       // if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
     }
     

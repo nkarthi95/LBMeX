@@ -43,6 +43,7 @@ inline Vector<std::string> VariableNames(const int numVars) {
   if (cnt<numVars) var_names[cnt++] = "density";
   if (cnt<numVars) var_names[cnt++] = "phi";
   // velx, vely, velz
+  if (numVars == 2){return var_names;}
   for (int d=0; d<AMREX_SPACEDIM; d++) {
     name = "u";
     name += (120+d);

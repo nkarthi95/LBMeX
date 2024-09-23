@@ -25,6 +25,34 @@ AMREX_GPU_MANAGED Real temperature = 0.0;
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho, Real phi);
 
+// Newton-Raphson method function
+Real fb(Real initialGuess, double tolerance, int maxIterations) {
+    Real x = initialGuess;
+    for (int i = 0; i < maxIterations; ++i) {
+        Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
+        Real dfx = (-2.*T*pow(1, 2) - chi*pow(x, 2) + chi*pow(1, 2))/(2.*1*(pow(x, 2) - pow(1, 2)));
+        
+        // Prevent division by zero
+        if (dfx == 0.0) {
+          Print() << "Divide by 0 encountered in Newton Raphson\n" << std::endl;
+          exit(-1);
+        }
+
+        Real x_next = x - fx / dfx;
+
+        // Check if the difference between successive iterations is within tolerance
+        if (std::fabs(x_next - x) < tolerance) {
+            return x_next;
+        }
+
+        x = x_next;
+    }
+
+    Print() << "Maximum iteration reached without convergence in Newton Raphson\n" << std::endl;
+    exit(-1);
+    return x;
+}
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
 				  const Array1D<RealVect,0,2>& gradients,
@@ -474,34 +502,6 @@ inline void LBM_timestep(const Geometry& geom,
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
 
   hydrovars(fold, gold, hydrovs);
-}
-
-// Newton-Raphson method function
-Real fb(Real initialGuess, double tolerance, int maxIterations) {
-    Real x = initialGuess;
-    for (int i = 0; i < maxIterations; ++i) {
-        Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
-        Real dfx = (-2.*T*pow(1, 2) - chi*pow(x, 2) + chi*pow(1, 2))/(2.*1*(pow(x, 2) - pow(1, 2)));
-        
-        // Prevent division by zero
-        if (dfx == 0.0) {
-          Print() << "Divide by 0 encountered in Newton Raphson\n" << std::endl;
-          exit(-1);
-        }
-
-        Real x_next = x - fx / dfx;
-
-        // Check if the difference between successive iterations is within tolerance
-        if (std::fabs(x_next - x) < tolerance) {
-            return x_next;
-        }
-
-        x = x_next;
-    }
-
-    Print() << "Maximum iteration reached without convergence in Newton Raphson\n" << std::endl;
-    exit(-1);
-    return x;
 }
 
 // homogeneous mixture of C1 and C2 with random concentration fluctuations
