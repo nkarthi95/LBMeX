@@ -73,6 +73,7 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
   #endif
     mu(1) = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho)) - kappa*D2phi;
     // mu(1) = (-T*rho*log((rho - phi)/phi) - chi*(2.*phi - rho))/(rho) - 4.*kappa*D2phi + 2.*kappa*D2rho;
+    // The above is nonsense!
     // mu(1) = mu(1)/2; //I'm honestly not sure why this fixes the multiphase dynamics. 
     // I've checked and rechecked the thermodynamics multiple times and it all checks out but this divide by 2 seems to fix all issues.
     // I suspect its something about the expression having 2C, but the g distributions are meant to calculate phi, not 2C.
@@ -335,6 +336,11 @@ void thermalize_moments(int x, int y, int z,
 
   const Real discretization_factor_r = sqrt((1. - 0.5/tau_r)); //rho relaxation time
   const Real discretization_factor_p = sqrt((1. - 0.5/tau_p)); //phi relaxation time
+  // this is inconsistent with the relaxation times used in the noise covariance
+  // and the square root is wrong
+  // the mistakes compensate, i.e., you get the right result but for the wrong reason
+  // but does not work for the rho-phi sector
+
   // const Real discretization_factor_r = 1.;
   // const Real discretization_factor_p = 1.;
 
