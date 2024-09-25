@@ -6,7 +6,6 @@
 #else
     #include <fftw3.h>
     #include <fftw3-mpi.h>
-#endif
 
 #include <AMReX_GpuComplex.H>
 #include "LBM_d3q19.H"

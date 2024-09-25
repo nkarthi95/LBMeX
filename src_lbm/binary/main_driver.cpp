@@ -83,7 +83,10 @@ void main_driver(const char* argv) {
   Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);
   BoxArray ba(domain);
   // split BoxArray into chunks no larger than "max_grid_size" along a direction
-  ba.maxSize(max_grid_size);
+  if(max_grid_size_x != max_grid_size_y or max_grid_size_y != max_grid_size_x or max_grid_size_y != max_grid_size_z){
+    IntVect max_grid_size = {max_grid_size_x, max_grid_size_y, max_grid_size_z};
+    ba.maxSize(max_grid_size);}
+  else{ba.maxSize(max_grid_size);}
   DistributionMapping dm(ba);
   // need two halo layers for gradients
   int nghost = 2;
@@ -152,7 +155,6 @@ void main_driver(const char* argv) {
     if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
 
     if (n_checkpoint > 0 && step%n_checkpoint == 0){
-      // WriteCheckPoint(step, hydrovs, hydro_chk);
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);

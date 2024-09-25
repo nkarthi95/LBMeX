@@ -2,6 +2,7 @@
 #include "LBM_IO.H"
 #include "LBM_FFT.H"
 #include <math.h> 
+#include "LBM_FFT.H"
 
 GpuArray<Real,ndof*ndof> square_matrix(GpuArray<Real,ndof*ndof> const& L) {
     GpuArray<Real,ndof*ndof> C = {};
