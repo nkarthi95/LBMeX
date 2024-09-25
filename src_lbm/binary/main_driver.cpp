@@ -11,8 +11,10 @@ using namespace amrex;
 #include "LBM_IO.H"
 
 void main_driver(const char* argv) {
-  // test_case_fft();
-  // if (!cholesky_test(100)) exit(-1);
+  #ifdef AMREX_DEBUG
+    test_case_fft();
+    if (!cholesky_test(100)) exit(-1);
+  #endif
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
@@ -20,13 +22,11 @@ void main_driver(const char* argv) {
   const std::string hydro_plt = "hydro_plt_";
   const std::string SF_plt = "SF_plt";
   const std::string hydro_chk = "chk_hydro_";
-  const std::string SF_chk = "chk_SF_";
   const std::string ref_plt = "ref_plt_";
-  const Vector<std::string> v = VariableNames(2);
 
   // default grid parameters
   int nx = 16; int ny = 16; int nz = 16;
-  int max_grid_size = 8;
+  IntVect max_grid_size = {16, 16, 16};
   int ic = 0;
   Real R = 0.3;
 
@@ -46,9 +46,10 @@ void main_driver(const char* argv) {
   pp.query("nx", nx);
   pp.query("ny", ny);
   pp.query("nz", nz);
-  pp.query("max_grid_size", max_grid_size);
+  pp.query("max_grid_size_x", max_grid_size[0]);
+  pp.query("max_grid_size_y", max_grid_size[1]);
+  pp.query("max_grid_size_z", max_grid_size[2]);
   pp.query("init_cond", ic);
-  pp.query("nz", nz);
   pp.query("R", R);
 
   // plot parameters
@@ -67,8 +68,11 @@ void main_driver(const char* argv) {
   pp.query("kappa", kappa);
   pp.query("lambda", chi);
   pp.query("T", T);
-  pp.query("temperature", temperature);
   pp.query("gamma", Gamma);
+
+  //fluctuation parameters
+  pp.query("temperature", temperature);
+  pp.query("correlated_noise", use_correlated_noise);
 
   // set up Box and Geomtry
   IntVect dom_lo(0, 0, 0);
@@ -121,12 +125,6 @@ void main_driver(const char* argv) {
       hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
       // WriteOutput(start_step, ref_params, geom, ref_plt, 2, output_hdf);
-      // const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
-      // bool test_file_path = file_exists(checkpointname);
-      // if (test_file_path and temperature > 0){
-      //   StructFact structFact;
-      //   structFact.ReadCheckPoint(SF_chk,ba,dm);
-      // }
       break;
   }
 
@@ -167,13 +165,6 @@ void main_driver(const char* argv) {
       StructFact structFact(ba, dm, var_names, var_scaling);
       }
     }
-    // if (plot_int > 0 && step%plot_int ==0) {
-    //   WriteOutput(step, hydrovs, geom, hydro_plt);
-    //   if (temperature > 0){
-    //     // WriteOutput(step, noise, geom, "xi_plt"); 
-    //     structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0); // remove 0 if k = 0 point is to be zeroed in output
-    //     StructFact structFact(ba, dm, var_names, var_scaling);}
-    // }
     Print() << "LB step " << step << " completed\n";
   }
   // Call the timer again and compute the maximum difference between the start time 

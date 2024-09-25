@@ -21,6 +21,7 @@ AMREX_GPU_MANAGED Real T = 0.6;
 
 // system temperature for fluctations
 AMREX_GPU_MANAGED Real temperature = 0.0;
+AMREX_GPU_MANAGED int use_correlated_noise = 0;
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho, Real phi);
