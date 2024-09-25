@@ -1,8 +1,6 @@
 #include "LBM_fluctuations.H"
 #include "LBM_IO.H"
-#include "LBM_FFT.H"
 #include <math.h> 
-#include "LBM_FFT.H"
 
 GpuArray<Real,ndof*ndof> square_matrix(GpuArray<Real,ndof*ndof> const& L) {
     GpuArray<Real,ndof*ndof> C = {};
@@ -79,6 +77,7 @@ bool cholesky_test(const int ntrial) {
 
     return status;
 }
+
 
 void generate_ifft_test_noise(const Geometry& geom, MultiFab& kspace_noise_real, MultiFab& kspace_noise_imag, int nx, int k){
     const Box domain = geom.Domain();

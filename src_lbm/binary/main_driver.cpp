@@ -11,10 +11,8 @@ using namespace amrex;
 #include "LBM_IO.H"
 
 void main_driver(const char* argv) {
-  #ifdef AMREX_DEBUG
-    test_case_fft();
-    if (!cholesky_test(100)) exit(-1);
-  #endif
+  // test_case_fft();
+  // if (!cholesky_test(100)) exit(-1);
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
@@ -50,6 +48,7 @@ void main_driver(const char* argv) {
   pp.query("max_grid_size_y", max_grid_size[1]);
   pp.query("max_grid_size_z", max_grid_size[2]);
   pp.query("init_cond", ic);
+  pp.query("nz", nz);
   pp.query("R", R);
 
   // plot parameters
@@ -83,10 +82,7 @@ void main_driver(const char* argv) {
   Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);
   BoxArray ba(domain);
   // split BoxArray into chunks no larger than "max_grid_size" along a direction
-  if(max_grid_size_x != max_grid_size_y or max_grid_size_y != max_grid_size_x or max_grid_size_y != max_grid_size_z){
-    IntVect max_grid_size = {max_grid_size_x, max_grid_size_y, max_grid_size_z};
-    ba.maxSize(max_grid_size);}
-  else{ba.maxSize(max_grid_size);}
+  ba.maxSize(max_grid_size);
   DistributionMapping dm(ba);
   // need two halo layers for gradients
   int nghost = 2;
@@ -127,7 +123,6 @@ void main_driver(const char* argv) {
       checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
       hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
-      // WriteOutput(start_step, ref_params, geom, ref_plt, 2, output_hdf);
       break;
   }
 
@@ -155,6 +150,7 @@ void main_driver(const char* argv) {
     if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
 
     if (n_checkpoint > 0 && step%n_checkpoint == 0){
+      // WriteCheckPoint(step, hydrovs, hydro_chk);
       mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
       mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);

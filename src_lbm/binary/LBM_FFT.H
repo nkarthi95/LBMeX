@@ -6,9 +6,9 @@
 #else
     #include <fftw3.h>
     #include <fftw3-mpi.h>
+#endif
 
 #include <AMReX_GpuComplex.H>
-#include "LBM_d3q19.H"
 
 void compute_fft(const Geometry& geom, 
           const MultiFab& variables,
@@ -510,5 +510,4 @@ inline void compute_ifft(const Geometry& geom, MultiFab& realspace_noise,
     }
 
 }
-
 #endif

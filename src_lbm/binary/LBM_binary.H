@@ -21,7 +21,7 @@ AMREX_GPU_MANAGED Real T = 0.6;
 
 // system temperature for fluctations
 AMREX_GPU_MANAGED Real temperature = 0.0;
-AMREX_GPU_MANAGED int use_correlated_noise = 0;
+AMREX_GPU_MANAGED int use_correlated_noise = 1;
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho, Real phi);
@@ -350,12 +350,10 @@ void thermalize_moments(int x, int y, int z,
       const Array4<Real>& noise) {
   // diffusive moments 1,2,3 in noise at 5,6,7
 
-  // const Real discretization_factor_r = sqrt((1. - 0.5/tau_r)); //rho relaxation time
-  // const Real discretization_factor_p = sqrt((1. - 0.5/tau_p)); //phi relaxation time
+  const Real discretization_factor_r = sqrt((1. - 0.5/tau_r)); //rho relaxation time
+  const Real discretization_factor_p = sqrt((1. - 0.5/tau_p)); //phi relaxation time
   // const Real discretization_factor_r = 1.;
   // const Real discretization_factor_p = 1.;
-  const Real discretization_factor_r = 1. - 0.5/tau_r; //rho relaxation time
-  const Real discretization_factor_p = 1. - 0.5/tau_p; //phi relaxation time
 
   // nk implementation
   for (int i=0; i<3; i++){
