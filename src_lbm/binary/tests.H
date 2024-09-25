@@ -2,8 +2,8 @@
 #include "LBM_IO.H"
 #include <math.h> 
 
-GpuArray<GpuComplex<Real>,ndof*ndof> square_matrix(GpuArray<GpuComplex<Real>,ndof*ndof> const& L) {
-    GpuArray<GpuComplex<Real>,ndof*ndof> C = {};
+GpuArray<Real,ndof*ndof> square_matrix(GpuArray<Real,ndof*ndof> const& L) {
+    GpuArray<Real,ndof*ndof> C = {};
     C.fill(0.);
     for (int i=0; i<ndof; ++i) {
         for (int j=0; j<ndof; ++j) {
@@ -15,8 +15,8 @@ GpuArray<GpuComplex<Real>,ndof*ndof> square_matrix(GpuArray<GpuComplex<Real>,ndo
     return C;
 }
 
-GpuArray<GpuComplex<Real>,ndof*ndof> spd_matrix(const int n, const int bstart) {
-    GpuArray<GpuComplex<Real>,ndof*ndof> A, C;
+GpuArray<Real,ndof*ndof> spd_matrix(const int n, const int bstart) {
+    GpuArray<Real,ndof*ndof> A, C;
     C.fill(0.);
     for (int i=bstart; i<n; ++i) {
         for (int j=bstart; j<n; ++j) {
@@ -34,17 +34,17 @@ GpuArray<GpuComplex<Real>,ndof*ndof> spd_matrix(const int n, const int bstart) {
     return C;
 }
 
-bool test_matrix(GpuArray<GpuComplex<Real>,ndof*ndof> const& A, GpuArray<GpuComplex<Real>,ndof*ndof> const& B) {
+bool test_matrix(GpuArray<Real,ndof*ndof> const& A, GpuArray<Real,ndof*ndof> const& B) {
     bool test = true;
-    // GpuComplex<Real> diff, sum;
+    // Real diff, sum;
     for (int i=0; i<ndof; ++i) {
         for (int j=0; j<=i; ++j) {
-            const GpuComplex<Real> a = A[i*ndof+j];
-            const GpuComplex<Real> b = B[i*ndof+j];
-            const GpuComplex<Real> diff = a - b;
-            const GpuComplex<Real> sum  = a + b;
+            const Real a = A[i*ndof+j];
+            const Real b = B[i*ndof+j];
+            const Real diff = a - b;
+            const Real sum  = a + b;
 
-            if ((fabs(diff.real())>FLT_EPSILON) && (fabs(sum.real())>FLT_EPSILON)) {
+            if ((fabs(diff)>FLT_EPSILON) && (fabs(sum)>FLT_EPSILON)) {
                 Print() << "Test failed: " << i << " " << j << " " << "A = " << A[i*ndof+j] << "\tB = " << B[i*ndof+j] << "\t" << diff << "\n";
                 test = false;
             }
@@ -56,7 +56,7 @@ bool test_matrix(GpuArray<GpuComplex<Real>,ndof*ndof> const& A, GpuArray<GpuComp
 bool cholesky_test(const int ntrial) {
     bool status = true;
 
-    GpuArray<GpuComplex<Real>,ndof*ndof> A, B, C;
+    GpuArray<Real,ndof*ndof> A, B, C;
     for (int t=0; t<ntrial; ++t) {
         C = spd_matrix(ndof, ncons);
         A = C;
@@ -157,7 +157,7 @@ void test_case_fft(){
     generate_ifft_test_noise(geom, variables_dft_real, variables_dft_imag, L, reps);
     WriteSingleLevelPlotfile("ifft_test_plt_input", variables_dft_real, var_names, geom, 0, 0);
     Print() << "data generated \n";
-    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag);
+    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag, NVAR);
     WriteSingleLevelPlotfile("ifft_test_plt", noise, var_names, geom, 0, 0);
     Print() << "IFFT completed \n";
 
@@ -165,7 +165,7 @@ void test_case_fft(){
     compute_fft(geom, noise, variables_dft_real, variables_dft_imag, NVAR, unpack);
     
     noise.setVal(0.);
-    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag);
+    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag, NVAR);
     WriteSingleLevelPlotfile("ifft_to_fft_to_ifft_test_plt", noise, var_names, geom, 0, 0);
     Print() << "FFT_to_iFFT completed \n";
 }
