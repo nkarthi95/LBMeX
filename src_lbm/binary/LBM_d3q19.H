@@ -327,4 +327,38 @@ inline Array<Real,nvel> mequilibrium(int x, int y, int z, const Array4<Real>& m)
   return mequilibrium(rho, j/rho);
 }
 
+#if 0
+struct bulk_free_energy {
+    Real rho;  // Density
+    Real phi;  // 
+
+    // Overloaded constructor without k
+    bulk_free_energy(double density, double porosity)
+        : rho(density), phi(porosity) {}
+
+    // Default constructor
+    bulk_free_energy() : rho(1.), phi(0.) {}
+
+    Real calculate_free_energy_rho(){
+      Real out = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4);
+      return out;
+    }
+
+    Real calculate_free_energy_phi(){
+      Real out = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho));
+      return out;
+    }
+
+    // // Function to calculate pore density
+    // void calculatePoreDensity() {
+    //     if (phi > 0.0 && phi < 1.0) {
+    //         poreDensity = rho / (1.0 - phi);
+    //     } else {
+    //         poreDensity = 0.0;  // Set to 0 for invalid porosity values
+    //     }
+    // }
+
+};
+#endif
+
 #endif
