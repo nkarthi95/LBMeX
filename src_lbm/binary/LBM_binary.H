@@ -58,8 +58,14 @@ struct bulk_free_energy {
       return out;
     }
 
+    Real calculate_dmup_drho(){
+      const Real out = -T*phi/(rho*rho-phi*phi) + chi/2.*phi/(rho*rho);
+      return out;
+    }
+
     Real calculate_dmup_dphi(){
-      const Real out = (-2.*T*pow(rho, 2) - chi*pow(phi, 2) + chi*pow(rho, 2))/(2.*rho*(pow(phi, 2) - pow(rho, 2)));
+      // const Real out = (-2.*T*pow(rho, 2) - chi*pow(phi, 2) + chi*pow(rho, 2))/(2.*rho*(pow(phi, 2) - pow(rho, 2)));
+      const Real out = T*rho/(rho*rho-phi*phi) - chi/2/rho;
       return out;
     }
 

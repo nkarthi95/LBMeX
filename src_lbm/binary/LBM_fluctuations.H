@@ -109,10 +109,11 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
   const Real lambda_r = 1./tau_r;
   const Real lambda_p = 1./tau_p;
 
-  const Real cs2k = curr_state.sound_speed_square() + kappa*k2*rho0; //+ kappa*k2*phi0; //checked after conversion
-  const Real mu_rho = curr_state.calculate_dmur_drho() + k2*kappa;
+  const Real cs2k = curr_state.sound_speed_square() + kappa*k2*rho0;
+  // const Real mu_rho = curr_state.calculate_dmur_drho() + k2*kappa;
+  const Real mu_rho = curr_state.calculate_dmup_drho();
   const Real mu_phi = curr_state.calculate_dmup_dphi() + k2*kappa;
-  const Real p_C = k2*kappa*phi0; //checked after conversion
+  const Real p_C = k2*kappa*phi0;
   
   GpuArray<Real,ndof*ndof> Xi = {};
   Xi.fill(0.);
@@ -365,6 +366,7 @@ inline void generate_fluctuations(const Geometry& geom,
 
   if (use_correlated_noise){
     // generate noise in k-space
+    Print() << "Correlated noise\n";
     generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
     // note that the k-space noise is generated without the required symmetries
     // (this is to allow for parallel generation of noise)
@@ -374,6 +376,7 @@ inline void generate_fluctuations(const Geometry& geom,
     compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
   }
   else{
+    Print() << "Uncorrelated noise\n";
     generate_realspace_noise(geom, ref_params, noise);
   }
 
