@@ -23,8 +23,62 @@ AMREX_GPU_MANAGED Real T = 0.6;
 AMREX_GPU_MANAGED Real temperature = 0.0;
 AMREX_GPU_MANAGED int use_correlated_noise = 1;
 
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real pressure(Real rho, Real phi);
+
+struct bulk_free_energy {
+    Real rho;  // Density
+    Real phi;  // order_parameter
+
+    // Overloaded constructor without k
+    bulk_free_energy(double density, double order_parameter)
+        : rho(density), phi(order_parameter) {}
+
+    // Default constructor
+    bulk_free_energy() : rho(1.), phi(0.) {}
+
+    Real calculate_f(){
+      const Real C1 = (rho + phi)/2;
+      const Real C2 = (rho - phi)/2;
+      const Real out = chi/4.*rho*(1. - pow(phi/rho, 2)) - rho*T + T*C1*log(C1) + T*C2*log(C2);
+      return out;
+    }
+
+    Real calculate_df_drho(){
+      // const Real out = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4);
+      const Real out = 0.;
+      return out;
+    }
+
+    Real calculate_df_dphi(){
+      const Real out = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho));
+      return out;
+    }
+    
+    Real calculate_dmur_drho(){
+      const Real out = (-2.*T*pow(rho, 4) - chi*pow(phi, 4) + chi*pow(phi*rho, 2))/(2.*pow(rho, 3)*(pow(phi, 2) - pow(rho, 2)));
+      return out;
+    }
+
+    Real calculate_dmup_dphi(){
+      const Real out = (-2.*T*pow(rho, 2) - chi*pow(phi, 2) + chi*pow(rho, 2))/(2.*rho*(pow(phi, 2) - pow(rho, 2)));
+      return out;
+    }
+
+    Real bulk_pressure(){
+      const Real out = rho*T;
+      return out;
+    }
+
+    Real sound_speed_square(){
+      const Real out = T;
+      return T;
+    }
+
+    Real component_pressure(){
+      const Real out = 0.;
+      return out;
+    }
+
+};
 
 // Newton-Raphson method function
 Real fb(Real initialGuess, double tolerance, int maxIterations) {
@@ -53,11 +107,6 @@ Real fb(Real initialGuess, double tolerance, int maxIterations) {
     exit(-1);
     return x;
 }
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
-				  const Array1D<RealVect,0,2>& gradients,
-				  const Array1D<Real,0,2>& laplacians);
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -94,27 +143,29 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
 
+  bulk_free_energy curr_state(rho, phi);
+
   Array1D<Real,0,2> mu = { 0.0, 0.0 } ;
   #if 0
     /* mu_rho is not needed for the calculations.
       The following expression has not been tested. */
-    mu(0) = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho;
+    // mu(0) = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho;
+    mu(0) = curr_state.calculate_df_drho() - kappa*D2rho;
   #endif
-    mu(1) = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho)) - kappa*D2phi;
-    // mu(1) = (-T*rho*log((rho - phi)/phi) - chi*(2.*phi - rho))/(rho) - 4.*kappa*D2phi + 2.*kappa*D2rho;
-    // mu(1) = mu(1)/2; //I'm honestly not sure why this fixes the multiphase dynamics. 
-    // I've checked and rechecked the thermodynamics multiple times and it all checks out but this divide by 2 seems to fix all issues.
-    // I suspect its something about the expression having 2C, but the g distributions are meant to calculate phi, not 2C.
+    // mu(1) = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho)) - kappa*D2phi;
+    mu(1) = curr_state.calculate_df_dphi() - kappa*D2phi;
     // Print() << "d2phi: " << D2phi << "d2rho: " << D2rho << " mu_phi: " << mu(1) << " rho: " << rho << " phi: " << phi << "\n";
   return mu;
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho, Real C) {
-  Real p0 = 0.0;
-  // p0 += C*lambda*(2.*C/pow(rho, 2) - 1) + C*T*log((rho - C)/C);
-  p0 += rho*T; // Eq. (40) in Swift et al.
-  // note that gradient terms are included in fequilibrium
+  bulk_free_energy curr_state(rho, C);
+  // Real p0 = 0.0;
+  // // p0 += C*lambda*(2.*C/pow(rho, 2) - 1) + C*T*log((rho - C)/C);
+  // p0 += rho*T; // Eq. (40) in Swift et al.
+  // // note that gradient terms are included in fequilibrium
+  const Real p0 = curr_state.bulk_pressure();
   return p0;
 }
 
@@ -363,16 +414,6 @@ void thermalize_moments(int x, int y, int z,
     mf(i) += discretization_factor_r*noise(x,y,z,i+4);
     mg(i) += discretization_factor_p*noise(x,y,z,nvel+i);
   }
-
-  // // us implementation
-  // for (int i=1; i<ncons; ++i) {
-  //   mg(i) += discretization_factor_p*noise(x,y,z,ncons+i);
-  // }
-  // // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
-  // for (int i=ncons; i<nvel; ++i) {
-  //   mf(i) += discretization_factor_r*noise(x,y,z,ncons+i);
-  //   mg(i) += discretization_factor_p*noise(x,y,z,nvel+i);
-  // }
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -460,26 +501,22 @@ void hydrovars(int x, int y, int z,
 
   // nk implementation
   for (int i=1; i<4; i++) {
-    // Print() << "Index to h: " << i + 1 << " Index in mf: " << i << "\n";
     h(x,y,z,i+1) = mf(i)/mf(0);
-    // Print() << "Index to h: " << i + 4 << " Index in mg: " << i << "\n";
     h(x,y,z,i+4) = mg(i);
+    #if AMREX_DEBUG
+      Print() << "Index to h: " << i + 1 << " Index in mf: " << i << "\n";
+      Print() << "Index to h: " << i + 4 << " Index in mg: " << i << "\n";
+    #endif
+
   }
   for (int i=4; i<nvel; i++) {
-    // Print() << "Index to h: " << i + 4 << " Index in mf: " << i << "\n";
     h(x,y,z,i+4) = mf(i);
-    // Print() << "Index to h: " << i + nvel  << " Index in mg: " << i << "\n";
     h(x,y,z,i+nvel) = mg(i);
+    #if AMREX_DEBUG
+      Print() << "Index to h: " << i + 4 << " Index in mf: " << i << "\n";
+      Print() << "Index to h: " << i + nvel  << " Index in mg: " << i << "\n";
+    #endif
   }
-  // // us implementation
-  // for (int i=1; i<ncons; ++i) {
-  //   h(x,y,z,i+1) = mf(i)/mf(0);
-  //   h(x,y,z,i+ncons) = mg(i);
-  // }
-  // for (int i=ncons; i<nvel; ++i) {
-  //   h(x,y,z,i+ncons) = mf(i);
-  //   h(x,y,z,i+nvel) = mg(i);
-  // }
 }
 
 // calculate hydrodynamic moments for whole lattice
