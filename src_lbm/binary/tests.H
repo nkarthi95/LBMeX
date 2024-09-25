@@ -1,5 +1,6 @@
 #include "LBM_fluctuations.H"
 #include "LBM_IO.H"
+#include "LBM_FFT.H"
 #include <math.h> 
 #include "LBM_FFT.H"
 

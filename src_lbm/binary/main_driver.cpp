@@ -11,8 +11,10 @@ using namespace amrex;
 #include "LBM_IO.H"
 
 void main_driver(const char* argv) {
-  // test_case_fft();
-  // if (!cholesky_test(100)) exit(-1);
+  #ifdef AMREX_DEBUG
+    test_case_fft();
+    if (!cholesky_test(100)) exit(-1);
+  #endif
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
@@ -24,10 +26,7 @@ void main_driver(const char* argv) {
 
   // default grid parameters
   int nx = 16; int ny = 16; int nz = 16;
-  int max_grid_size_x = 8;
-  int max_grid_size_y = 8;
-  int max_grid_size_z = 8;
-  int max_grid_size = 8;
+  IntVect max_grid_size = {16, 16, 16};
   int ic = 0;
   Real R = 0.3;
 
@@ -47,12 +46,10 @@ void main_driver(const char* argv) {
   pp.query("nx", nx);
   pp.query("ny", ny);
   pp.query("nz", nz);
-  pp.query("max_grid_size", max_grid_size);
-  pp.query("max_grid_size_x", max_grid_size_x);
-  pp.query("max_grid_size_y", max_grid_size_y);
-  pp.query("max_grid_size_z", max_grid_size_z);
+  pp.query("max_grid_size_x", max_grid_size[0]);
+  pp.query("max_grid_size_y", max_grid_size[1]);
+  pp.query("max_grid_size_z", max_grid_size[2]);
   pp.query("init_cond", ic);
-  pp.query("nz", nz);
   pp.query("R", R);
 
   // plot parameters
@@ -73,7 +70,7 @@ void main_driver(const char* argv) {
   pp.query("T", T);
   pp.query("gamma", Gamma);
 
-  // fluctuations
+  //fluctuation parameters
   pp.query("temperature", temperature);
   pp.query("correlated_noise", use_correlated_noise);
 

@@ -2,12 +2,10 @@
 #define LBM_FFT_H_
 
 #ifdef AMREX_USE_CUDA
-  #include <cufft.h>
+    #include <cufft.h>
 #else
-  #include <fftw3.h>
-  #include <fftw3-mpi.h>
-  #include <lapacke.h>
-#endif
+    #include <fftw3.h>
+    #include <fftw3-mpi.h>
 
 #include <AMReX_GpuComplex.H>
 #include "LBM_d3q19.H"
@@ -365,8 +363,7 @@ inline void check_kspace_symmetries(const Geometry& geom,
 
 inline void compute_ifft(const Geometry& geom, MultiFab& realspace_noise,
 			 const MultiFab& kspace_noise_real,
-			 const MultiFab& kspace_noise_imag,
-             int nvar) {
+			 const MultiFab& kspace_noise_imag, int NVAR) {
   BL_PROFILE_VAR("compute_ifft",compute_ifft);
   #ifdef AMREX_USE_CUDA
       //Print() << "Using cuFFT\n";
@@ -408,7 +405,7 @@ inline void compute_ifft(const Geometry& geom, MultiFab& realspace_noise,
     Vector<FFTplan> fftw_plans;
     FFTplan plan;
 
-    for (int k=0; k<nvar; ++k) {
+    for (int k=0; k<NVAR; ++k) {
 
       // first copy the k-th conponent of the noise to one grid
       // may be faster to generate the noise here? [uschill 07/27/2022]
