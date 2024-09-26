@@ -13,11 +13,10 @@
 #include <math.h>
 #include <vector>
 #include "LBM_d3q19.H"
-#include "LBM_binary.H"
 #include "LBM_FFT.H"
+#include "LBM_thermodynamics.H"
 
 const int ncons = 2 + AMREX_SPACEDIM;
-const int ndof = 2*nvel;
 
 // Cholesky decomposition of matrix A
 // result is stored in lower triangle of A
@@ -57,29 +56,6 @@ void cholesky_decomp(GpuArray<Real,ndof*ndof>& A, const int n, const int bstart)
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real fourier_laplace_operator(int ikx, int iky, int ikz, const Box& domain) {
-  BL_PROFILE_VAR("fourier_laplace_operator()",fourier_laplace_operator);
-  Real k2;
-
-  IntVect n = domain.length();
-
-  // FFTW convention for ordering of wave vectors
-  Real kx = (ikx < (n[0]+1)/2) ? 2.*M_PI/n[0]*ikx : 2.*M_PI/n[0]*(ikx-n[0]);
-  Real ky = (iky < (n[1]+1)/2) ? 2.*M_PI/n[1]*iky : 2.*M_PI/n[1]*(iky-n[1]);
-  Real kz = (ikz < (n[2]+1)/2) ? 2.*M_PI/n[2]*ikz : 2.*M_PI/n[2]*(ikz-n[2]);
-
-  Real cosx = cos(kx);
-  Real cosy = cos(ky);
-  Real cosz = cos(kz);
-
-  Real expr1 = cosx + cosy + cosz;
-  Real expr2 = cosx*cosy + cosy*cosz + cosx*cosz;
-  k2 = -2./cs2*(1./9.*expr1 + 1./9.*expr2 - 2./3.);
-
-  return k2;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const Box& domain, RandomEngine const& engine) {
   BL_PROFILE_VAR("kspace_white_noise()",kspace_white_noise);
   GpuArray<GpuComplex<Real>,ndof> r = {};
@@ -99,195 +75,6 @@ GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const
   return r;
 }
 
-// noise covariance matrix of the LB modes
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, const Real k2) {
-  BL_PROFILE_VAR("noise_covariance()",noise_covariance);
-  const uint Q = nvel;
-  // Print() << "Discrete covariance matrix\n";
-  const Real kT = temperature;
-
-  bulk_free_energy curr_state(rho0, phi0);
-  const Real cs2 = curr_state.sound_speed_square() + kappa*k2*rho0;
-  // const Real mu_rho = curr_state.calculate_dmur_drho() + k2*kappa;
-  const Real mu_rho = curr_state.calculate_dmup_drho();
-  const Real mu_phi = curr_state.calculate_dmup_dphi() + k2*kappa;
-  const Real p_phi = k2*kappa*phi0;
-
-  // TODO: generalize to MRT
-  const Real lambdaLB_r = -1./tau_r;
-  const Real lambdaLB_p = -1./tau_p;
-
-  // Noise covariance of the modes in k-space
-  GpuArray<Real,ndof*ndof> Xi = {};
-  Xi.fill(0);
-
-  // TODO: discretized needs check!
-  Real lambda_r = -lambdaLB_r*(2+lambdaLB_r)/2;
-  Real lambda_p = -lambdaLB_p*(2+lambdaLB_p)/2;
-  Real lambda_rp = -lambdaLB_r*(2+lambdaLB_p)/2;
-  Real lambda_pr = -lambdaLB_p*(2+lambdaLB_r)/2;
-
-  // diagonal part
-  Xi[(   5)*ndof+(   5)] = 2.*Gamma*kT/rho0*lambda_p;
-  Xi[(   6)*ndof+(   6)] = 2.*Gamma*kT/rho0*lambda_p;
-  Xi[(   7)*ndof+(   7)] = 2.*Gamma*kT/rho0*lambda_p;
-  Xi[(   8)*ndof+(   8)] = 2.*kT*rho0*(5 - 9*cs2)*lambda_r;
-  Xi[(   9)*ndof+(   9)] = 8.*kT*rho0*lambda_r;
-  Xi[(  10)*ndof+(  10)] = (8.0/3.0)*kT*rho0*lambda_r;
-  Xi[(  11)*ndof+(  11)] = (2.0/3.0)*kT*rho0*lambda_r;
-  Xi[(  12)*ndof+(  12)] = (2.0/3.0)*kT*rho0*lambda_r;
-  Xi[(  13)*ndof+(  13)] = (2.0/3.0)*kT*rho0*lambda_r;
-  Xi[(  14)*ndof+(  14)] = 4.*kT*rho0*lambda_r;
-  Xi[(  15)*ndof+(  15)] = 4.*kT*rho0*lambda_r;
-  Xi[(  16)*ndof+(  16)] = 4.*kT*rho0*lambda_r;
-  Xi[(  17)*ndof+(  17)] = (4.0/3.0)*kT*rho0*lambda_r;
-  Xi[(  18)*ndof+(  18)] = (4.0/3.0)*kT*rho0*lambda_r;
-  Xi[(Q+ 0)*ndof+(Q+ 0)] = (4.0/3.0)*kT*rho0*lambda_r;
-  Xi[(Q+ 1)*ndof+(Q+ 1)] = 18.*kT*rho0*(1 - cs2)*lambda_r;
-  Xi[(Q+ 2)*ndof+(Q+ 2)] = 8.*kT*rho0*lambda_r;
-  Xi[(Q+ 3)*ndof+(Q+ 3)] = (8.0/3.0)*kT*rho0*lambda_r;
-  Xi[(Q+ 4)*ndof+(Q+ 4)] = 2.*Gamma*kT/rho0*(-9*Gamma*mu_phi + 5)*lambda_p;
-  Xi[(Q+ 5)*ndof+(Q+ 5)] = 8.*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+ 6)*ndof+(Q+ 6)] = (8.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+ 7)*ndof+(Q+ 7)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+ 8)*ndof+(Q+ 8)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+ 9)*ndof+(Q+ 9)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+10)*ndof+(Q+10)] = 4.*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+11)*ndof+(Q+11)] = 4.*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+12)*ndof+(Q+12)] = 4.*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+13)*ndof+(Q+13)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+14)*ndof+(Q+14)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+15)*ndof+(Q+15)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+16)*ndof+(Q+16)] = 18.*Gamma*kT/rho0*(-Gamma*mu_phi + 1)*lambda_p;
-  Xi[(Q+17)*ndof+(Q+17)] = 8.*Gamma*kT/rho0*lambda_p;
-  Xi[(Q+18)*ndof+(Q+18)] = (8.0/3.0)*Gamma*kT/rho0*lambda_p;
-
-  // rho-rho sector [0, 2..4, 8..(Q+3)]
-  Xi[(   8)*ndof+(Q+ 1)] = 6.*kT*rho0*(3*cs2 - 1)*lambda_r;
-  Xi[(Q+ 1)*ndof+(   8)] = 6.*kT*rho0*(3*cs2 - 1)*lambda_r;
-
-  // phi-phi sector [1, 5..7, (Q+4)..(Q-1)]
-  Xi[(Q+ 4)*ndof+(Q+16)] = 6.*Gamma*kT/rho0*(3*Gamma*mu_phi - 1)*lambda_p;
-  Xi[(Q+16)*ndof+(Q+ 4)] = 6.*Gamma*kT/rho0*(3*Gamma*mu_phi - 1)*lambda_p;
-
-  // rho-phi sector
-  Xi[(   8)*ndof+(Q+ 4)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(Q+ 4)*ndof+(   8)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(   8)*ndof+(Q+16)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(Q+16)*ndof+(   8)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-
-  Xi[(Q+ 1)*ndof+(Q+ 4)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(Q+ 4)*ndof+(Q+ 1)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(Q+ 1)*ndof+(Q+16)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-  Xi[(Q+16)*ndof+(Q+ 1)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-
-  Xi[(   0)*ndof+(Q+ 4)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
-  Xi[(Q+ 4)*ndof+(   0)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
-  Xi[(   0)*ndof+(Q+16)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
-  Xi[(Q+16)*ndof+(   0)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
-  Xi[(   1)*ndof+(Q+ 1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
-  Xi[(Q+ 1)*ndof+(   1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
-  Xi[(   1)*ndof+(   8)] = -3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
-  Xi[(   8)*ndof+(   1)] = -3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
-  Xi[(   2)*ndof+(   5)] = -phi0*kT*lambda_pr;
-  Xi[(   3)*ndof+(   6)] = -phi0*kT*lambda_pr;
-  Xi[(   4)*ndof+(   7)] = -phi0*kT*lambda_pr;
-  Xi[(   5)*ndof+(   2)] = -phi0*kT*lambda_pr;
-  Xi[(   6)*ndof+(   3)] = -phi0*kT*lambda_pr;
-  Xi[(   7)*ndof+(   4)] = -phi0*kT*lambda_pr;
-
-  return Xi;
-}
-#if 0
-GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, const Real k2) { // TODO: add function arguments: rho, phi, k, others?
-  BL_PROFILE_VAR("noise_covariance()",noise_covariance);
-  // Print() << "Continuous covariance matrix\n";
-  const int Q = nvel;
-  const Real kT = temperature;
-
-  // TODO: generalize to MRT
-  const Real lambda_r = 1./tau_r;
-  const Real lambda_p = 1./tau_p;
-  
-  bulk_free_energy curr_state(rho0, phi0);
-  const Real cs2k = curr_state.sound_speed_square() + kappa*k2*rho0;
-  // const Real mu_rho = curr_state.calculate_dmur_drho() + k2*kappa;
-  const Real mu_rho = curr_state.calculate_dmup_drho();
-  const Real mu_phi = curr_state.calculate_dmup_dphi() + k2*kappa;
-  const Real p_C = k2*kappa*phi0;
-  
-  GpuArray<Real,ndof*ndof> Xi = {};
-  Xi.fill(0.);
-
-  // diagonal part sector
-  Xi[195] = 2.*Gamma*kT*lambda_p/rho0;
-  Xi[234] = 2.*Gamma*kT*lambda_p/rho0;
-  Xi[273] = 2.*Gamma*kT*lambda_p/rho0;
-  Xi[312] = 2.*kT*lambda_r*rho0*(5. - 9.*cs2k);
-  Xi[351] = 8.*kT*lambda_r*rho0;
-  Xi[390] = (8.0/3.0)*kT*lambda_r*rho0;
-  Xi[429] = (2.0/3.0)*kT*lambda_r*rho0;
-  Xi[468] = (2.0/3.0)*kT*lambda_r*rho0;
-  Xi[507] = (2.0/3.0)*kT*lambda_r*rho0;
-  Xi[546] = 4.*kT*lambda_r*rho0;
-  Xi[585] = 4.*kT*lambda_r*rho0;
-  Xi[624] = 4.*kT*lambda_r*rho0;
-  Xi[663] = (4.0/3.0)*kT*lambda_r*rho0;
-  Xi[702] = (4.0/3.0)*kT*lambda_r*rho0;
-  Xi[741] = (4.0/3.0)*kT*lambda_r*rho0;
-  Xi[780] = 18.*kT*lambda_r*rho0*(1. - cs2k);
-  Xi[819] = 8.*kT*lambda_r*rho0;
-  Xi[858] = (8.0/3.0)*kT*lambda_r*rho0;
-  Xi[897] = 2.*Gamma*kT*lambda_p*(-9.*Gamma*mu_phi + 5.)/rho0;
-  Xi[936] = 8.*Gamma*kT*lambda_p/rho0;
-  Xi[975] = (8.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1014] = (2.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1053] = (2.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1092] = (2.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1131] = 4.*Gamma*kT*lambda_p/rho0;
-  Xi[1170] = 4.*Gamma*kT*lambda_p/rho0;
-  Xi[1209] = 4.*Gamma*kT*lambda_p/rho0;
-  Xi[1248] = (4.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1287] = (4.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1326] = (4.0/3.0)*Gamma*kT*lambda_p/rho0;
-  Xi[1365] = 18.*Gamma*kT*lambda_p*(-Gamma*mu_phi + 1.)/rho0;
-  Xi[1404] = 8.*Gamma*kT*lambda_p/rho0;
-  Xi[1443] = (8.0/3.0)*Gamma*kT*lambda_p/rho0;
-
-  // rho-phi or phi-rho sector
-  Xi[23] = -3.*Gamma*kT*lambda_p*mu_rho*rho0/cs2k;
-  Xi[35] = 3.*Gamma*kT*lambda_p*mu_rho*rho0/cs2k;
-  Xi[58] = 3.*kT*lambda_r*(phi0*k2*kappa + p_C)/(mu_phi*rho0);
-  Xi[324] = 6.*kT*lambda_r*rho0*(3*cs2k - 1);
-  Xi[327] = -3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3.*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[339] = 3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3.*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[761] = 3.*kT*lambda_r*(phi0*k2*kappa + p_C)/(mu_phi*rho0);
-  Xi[768] = 6.*kT*lambda_r*rho0*(3.*cs2k - 1.);
-  Xi[874] = -3.*Gamma*kT*lambda_p*mu_rho*rho0/cs2k;
-  Xi[882] = -3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3.*cs2k - 1.) + cs2k*lambda_r*(3*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[1330] = 3.*Gamma*kT*lambda_p*mu_rho*rho0/cs2k;
-  Xi[1338] = 3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3.*cs2k - 1.) + cs2k*lambda_r*(3*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-
-  // rho-rho and phi-phi off diagonal
-  Xi[46] = -3.*kT*lambda_r*(phi0*k2*kappa + p_C)/(mu_phi*rho0);
-  Xi[81] = -phi0*kT*lambda_p;
-  Xi[120] = -phi0*kT*lambda_p;
-  Xi[159] = -phi0*kT*lambda_p;
-  Xi[192] = -phi0*kT*lambda_p;
-  Xi[231] = -phi0*kT*lambda_p;
-  Xi[270] = -phi0*kT*lambda_p;
-  Xi[305] = -3.*kT*lambda_r*(phi0*k2*kappa + p_C)/(mu_phi*rho0);
-  Xi[783] = 3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[795] = -3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[894] = 3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[909] = 6.*Gamma*kT*lambda_p*(3.*Gamma*mu_phi - 1.)/rho0;
-  Xi[1350] = -3.*kT*(Gamma*mu_phi*lambda_p*mu_rho*pow(rho0, 2)*(3*cs2k - 1.) + cs2k*lambda_r*(3.*Gamma*mu_phi - 1.)*(phi0*k2*kappa + p_C))/(mu_phi*cs2k*rho0);
-  Xi[1353] = 6.*Gamma*kT*lambda_p*(3.*Gamma*mu_phi - 1.)/rho0;
-
-  return Xi;
-}
-#endif
 // compute correlated noise vector from Gaussian random variables
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,

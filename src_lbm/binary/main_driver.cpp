@@ -9,6 +9,7 @@ using namespace amrex;
 #include "LBM_binary.H"
 #include "tests.H"
 #include "LBM_IO.H"
+#include "LBM_thermodynamics.H"
 
 void main_driver(const char* argv) {
   // test_case_fft();
@@ -23,10 +24,10 @@ void main_driver(const char* argv) {
   const std::string ref_plt = "ref_plt_";
 
   // default grid parameters
-  int nx = 16; int ny = 16; int nz = 16;
-  IntVect max_grid_size = {16, 16, 16};
-  int ic = 0;
-  Real R = 0.3;
+  // int nx = 16; int ny = 16; int nz = 16;
+  IntVect max_grid_size = {nx, ny, nz};
+  // int ic = 0;
+  // Real R = 0.3;
 
   // default time stepping parameters
   int n_sci_start = 0;

@@ -10,6 +10,63 @@
 #include <chrono>
 using namespace std::chrono;
 
+#include "LBM_d3q19.H"
+
+// relaxation parameters
+AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
+AMREX_GPU_MANAGED Real tau_p = 1.0;
+AMREX_GPU_MANAGED int nx = 16;
+AMREX_GPU_MANAGED int ny = 16;
+AMREX_GPU_MANAGED int nz = 16;
+AMREX_GPU_MANAGED int ic = 0;
+AMREX_GPU_MANAGED Real R = 0;
+
+// thermodynamic model
+AMREX_GPU_MANAGED Real kappa = 0.03;
+AMREX_GPU_MANAGED Real Gamma = 1.0;
+AMREX_GPU_MANAGED Real chi = 1.1;
+AMREX_GPU_MANAGED Real T = 0.6;
+
+// system temperature for fluctations
+AMREX_GPU_MANAGED Real temperature = 0.0;
+AMREX_GPU_MANAGED int use_correlated_noise = 1;
+
+//trying to move all input params to one place to clean code up
+#if 0
+struct input_params {
+    // default grid parameters
+    const int nx;
+    const int ny;
+    const int nz;
+    IntVect max_grid_size;
+    const int ic;
+    const Real R;
+
+    // default time stepping parameters
+    int n_sci_start;
+    int nsteps;
+    int dump_hydro;
+    int n_hydro;
+    int dump_SF;
+    int n_SF;
+    int start_step;
+    int output_hdf;
+
+    // AMREX_GPU_MANAGED Real kappa = 0.03;
+    const Real Gamma;
+    const Real chi;
+    const Real T;
+
+    // Default constructor
+    bulk_free_energy() : nx(16), ny(16), nz(16), max_grid_size({16, 16, 16}), ic(0), R(0.3), 
+                         n_sci_start(0), nsteps(100), 
+                         dump_hydro(1), n_hydro(10),  
+                         dump_SF(0), n_SF(10)
+                         start_step(0), output_hdf(0){}
+
+};
+#endif
+
 namespace {
     void GotoNextLine (std::istream& is)
     {
@@ -17,8 +74,6 @@ namespace {
         is.ignore(bl_ignore_max, '\n');
     }
 }
-
-#include "LBM_d3q19.H"
 
 inline void WriteDist(int step, 
       const MultiFab& fold,

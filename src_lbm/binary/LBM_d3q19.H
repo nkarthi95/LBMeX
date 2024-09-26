@@ -327,4 +327,53 @@ inline Array<Real,nvel> mequilibrium(int x, int y, int z, const Array4<Real>& m)
   return mequilibrium(rho, j/rho);
 }
 
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
+  RealVect gradient = { 0.0, 0.0, 0.0 };
+  for (int i=0; i<nvel; i++) {
+    int xp = x + c[i][0];
+    int yp = y + c[i][1];
+    int zp = z + c[i][2];
+    for (int dir=0; dir<3; dir++) {
+      gradient[dir] += w[i]/cs2*field(xp,yp,zp,icomp)*c[i][dir];
+    }
+  }
+  return gradient;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real laplacian(int x, int y, int z, const Array4<Real>& field, int icomp) {
+  Real laplacian = 0.0;
+  for (int i=0; i<nvel; i++) {
+    int xp = x + c[i][0];
+    int yp = y + c[i][1];
+    int zp = z + c[i][2];
+    laplacian += 2.*w[i]/cs2*(field(xp,yp,zp,icomp)-field(x,y,z,icomp));
+  }
+  return laplacian;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real fourier_laplace_operator(int ikx, int iky, int ikz, const Box& domain) {
+  BL_PROFILE_VAR("fourier_laplace_operator()",fourier_laplace_operator);
+  Real k2;
+
+  IntVect n = domain.length();
+
+  // FFTW convention for ordering of wave vectors
+  Real kx = (ikx < (n[0]+1)/2) ? 2.*M_PI/n[0]*ikx : 2.*M_PI/n[0]*(ikx-n[0]);
+  Real ky = (iky < (n[1]+1)/2) ? 2.*M_PI/n[1]*iky : 2.*M_PI/n[1]*(iky-n[1]);
+  Real kz = (ikz < (n[2]+1)/2) ? 2.*M_PI/n[2]*ikz : 2.*M_PI/n[2]*(ikz-n[2]);
+
+  Real cosx = cos(kx);
+  Real cosy = cos(ky);
+  Real cosz = cos(kz);
+
+  Real expr1 = cosx + cosy + cosz;
+  Real expr2 = cosx*cosy + cosy*cosz + cosx*cosz;
+  k2 = -2./cs2*(1./9.*expr1 + 1./9.*expr2 - 2./3.);
+
+  return k2;
+}
+
 #endif

@@ -2,96 +2,19 @@
 #define LBM_H_
 
 #include "LBM_d3q19.H"
-
-// relaxation parameters
-AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
-// AMREX_GPU_MANAGED Real tau_r = 1.0; 
-AMREX_GPU_MANAGED Real tau_p = 1.0;
-// AMREX_GPU_MANAGED Real tau_p = 0.7886751345948129;
-AMREX_GPU_MANAGED int nx = 16;
-AMREX_GPU_MANAGED int ny = 16;
-AMREX_GPU_MANAGED int nz = 16;
-AMREX_GPU_MANAGED int ic = 0;
-
-// thermodynamic model
-AMREX_GPU_MANAGED Real kappa = 0.03;
-AMREX_GPU_MANAGED Real Gamma = 1.0;
-AMREX_GPU_MANAGED Real chi = 1.1;
-AMREX_GPU_MANAGED Real T = 0.6;
-
-// system temperature for fluctations
-AMREX_GPU_MANAGED Real temperature = 0.0;
-AMREX_GPU_MANAGED int use_correlated_noise = 1;
-
-
-struct bulk_free_energy {
-    Real rho;  // Density
-    Real phi;  // order_parameter
-
-    // Overloaded constructor without k
-    bulk_free_energy(double density, double order_parameter)
-        : rho(density), phi(order_parameter) {}
-
-    // Default constructor
-    bulk_free_energy() : rho(1.), phi(0.) {}
-
-    Real calculate_f(){
-      const Real C1 = (rho + phi)/2;
-      const Real C2 = (rho - phi)/2;
-      const Real out = chi/4.*rho*(1. - pow(phi/rho, 2)) - rho*T + T*C1*log(C1) + T*C2*log(C2);
-      return out;
-    }
-
-    Real calculate_df_drho(){
-      // const Real out = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4);
-      const Real out = 0.;
-      return out;
-    }
-
-    Real calculate_df_dphi(){
-      const Real out = -chi/2.*(phi/rho) + T/2.*log((1. + phi/rho)/(1. - phi/rho));
-      return out;
-    }
-    
-    Real calculate_dmur_drho(){
-      const Real out = (-2.*T*pow(rho, 4) - chi*pow(phi, 4) + chi*pow(phi*rho, 2))/(2.*pow(rho, 3)*(pow(phi, 2) - pow(rho, 2)));
-      return out;
-    }
-
-    Real calculate_dmup_drho(){
-      const Real out = -T*phi/(rho*rho-phi*phi) + chi/2.*phi/(rho*rho);
-      return out;
-    }
-
-    Real calculate_dmup_dphi(){
-      // const Real out = (-2.*T*pow(rho, 2) - chi*pow(phi, 2) + chi*pow(rho, 2))/(2.*rho*(pow(phi, 2) - pow(rho, 2)));
-      const Real out = T*rho/(rho*rho-phi*phi) - chi/2/rho;
-      return out;
-    }
-
-    Real bulk_pressure(){
-      const Real out = rho*T;
-      return out;
-    }
-
-    Real sound_speed_square(){
-      const Real out = T;
-      return T;
-    }
-
-    Real component_pressure(){
-      const Real out = 0.;
-      return out;
-    }
-
-};
+#include "LBM_thermodynamics.H"
+#include "LBM_fluctuations.H"
 
 // Newton-Raphson method function
 Real fb(Real initialGuess, double tolerance, int maxIterations) {
-    Real x = initialGuess;
+    Real x = initialGuess; //value of phi
+    const Real rho = 1.;
+    bulk_free_energy curr_state(rho, x);
     for (int i = 0; i < maxIterations; ++i) {
-        Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
-        Real dfx = (-2.*T*pow(1, 2) - chi*pow(x, 2) + chi*pow(1, 2))/(2.*1*(pow(x, 2) - pow(1, 2)));
+        // Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
+        // Real dfx = (-2.*T*pow(rho, 2) - chi*pow(x, 2) + chi*pow(rho, 2))/(2.*rho*(pow(x, 2) - pow(rho, 2)));
+        Real fx = curr_state.calculate_df_dphi();
+        Real dfx = curr_state.calculate_dmup_drho();
         
         // Prevent division by zero
         if (dfx == 0.0) {
@@ -107,6 +30,7 @@ Real fb(Real initialGuess, double tolerance, int maxIterations) {
         }
 
         x = x_next;
+        curr_state.phi = x;
     }
 
     Print() << "Maximum iteration reached without convergence in Newton Raphson\n" << std::endl;
@@ -115,41 +39,15 @@ Real fb(Real initialGuess, double tolerance, int maxIterations) {
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
-  RealVect gradient = { 0.0, 0.0, 0.0 };
-  for (int i=0; i<nvel; i++) {
-    int xp = x + c[i][0];
-    int yp = y + c[i][1];
-    int zp = z + c[i][2];
-    for (int dir=0; dir<3; dir++) {
-      gradient[dir] += w[i]/cs2*field(xp,yp,zp,icomp)*c[i][dir];
-    }
-  }
-  return gradient;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real laplacian(int x, int y, int z, const Array4<Real>& field, int icomp) {
-  Real laplacian = 0.0;
-  for (int i=0; i<nvel; i++) {
-    int xp = x + c[i][0];
-    int yp = y + c[i][1];
-    int zp = z + c[i][2];
-    laplacian += 2.*w[i]/cs2*(field(xp,yp,zp,icomp)-field(x,y,z,icomp));
-  }
-  return laplacian;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
+Array1D<Real,0,2> chemical_potentials(bulk_free_energy curr_state,
 				  const Array1D<RealVect,0,2>& gradients,
           const Array1D<Real,0,2>& laplacians) {
-  const Real rho = fields(0);
-  const Real phi = fields(1);
+  // const Real rho = fields(0);
+  // const Real phi = fields(1);
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
 
-  bulk_free_energy curr_state(rho, phi);
+  // bulk_free_energy curr_state(rho, phi);
 
   Array1D<Real,0,2> mu = { 0.0, 0.0 } ;
   #if 0
@@ -163,19 +61,6 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
     // Print() << "d2phi: " << D2phi << "d2rho: " << D2rho << " mu_phi: " << mu(1) << " rho: " << rho << " phi: " << phi << "\n";
   return mu;
 }
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real pressure(Real rho, Real C) {
-  bulk_free_energy curr_state(rho, C);
-  // Real p0 = 0.0;
-  // // p0 += C*lambda*(2.*C/pow(rho, 2) - 1) + C*T*log((rho - C)/C);
-  // p0 += rho*T; // Eq. (40) in Swift et al.
-  // // note that gradient terms are included in fequilibrium
-  const Real p0 = curr_state.bulk_pressure();
-  return p0;
-}
-
-#include "LBM_fluctuations.H"
 
 #if 0 // equilibrium populations not necessary for MRT
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -231,20 +116,20 @@ Array1D<Real,0,nvel> fequilibrium(const Array1D<Real,0,2>& fields,
 #endif
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
+Array1D<Real,0,nvel> fequilibrium_moments(bulk_free_energy curr_state,
 			      const Array1D<RealVect,0,2>& gradients,
 			      const Array1D<Real,0,2>& laplacians,
 			      const RealVect& u) {
   Array1D<Real,0,nvel> mEq;
 
-  const Real rho = fields(0);
-  const Real phi = fields(1);
+  const Real rho = curr_state.rho;
+  const Real phi = curr_state.phi;
   const Real u2 = u[0]*u[0]+u[1]*u[1]+u[2]*u[2];
   const RealVect Drho = gradients(0);
   const RealVect Dphi = gradients(1);
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
-  const Real pbulk = pressure(rho, phi);
+  const Real pbulk = curr_state.bulk_pressure();
 
   Real G[3][3], traceG=0.; // Eq. (39) in Swift et al.
   G[0][0] = kappa*Drho[0]*Drho[0] + kappa*Dphi[0]*Dphi[0]; traceG  = G[0][0];
@@ -316,12 +201,14 @@ Array1D<Real,0,nvel> gequilibrium(const Real& phi,
 #endif
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,nvel> gequilibrium_moments(const Array1D<Real,0,2>& fields,
+Array1D<Real,0,nvel> gequilibrium_moments(bulk_free_energy curr_state,
 				   const Array1D<Real,0,2>& mu,
 				   const RealVect& u) {
   Array1D<Real,0,nvel> mEq;
 
-  const Real phi = fields(1);
+  // const Real phi = fields(1);
+  const Real rho = curr_state.rho;
+  const Real phi = curr_state.phi;
   const Real mu_phi = mu(1);
   const Real u2 = u[0]*u[0]+u[1]*u[1]+u[2]*u[2];
 
@@ -357,7 +244,8 @@ void relax_moments(int x, int y, int z,
 		   Array1D<Real,0,nvel>& mf,
 		   Array1D<Real,0,nvel>& mg,
 		   const Array4<Real>& h) {
-
+    
+  bulk_free_energy curr_state(h(x,y,z,0), h(x,y,z,1));
   const Array1D<Real,0,2> fields = { h(x,y,z,0), h(x,y,z,1) };
   const RealVect u = { h(x,y,z,2), h(x,y,z,3), h(x,y,z,4) };
 
@@ -371,11 +259,11 @@ void relax_moments(int x, int y, int z,
     laplacian(x,y,z,h,1),
   };
   // Print() << "x: " << x << " y: " << y << " z: " << z << "\n";
-  const Array1D<Real,0,2> mu = chemical_potentials(fields, gradients, laplacians);
+  const Array1D<Real,0,2> mu = chemical_potentials(curr_state, gradients, laplacians);
 
   Array1D<Real,0,nvel> mfEq, mgEq;
-  mfEq = fequilibrium_moments(fields, gradients, laplacians, u);
-  mgEq = gequilibrium_moments(fields, mu, u);
+  mfEq = fequilibrium_moments(curr_state, gradients, laplacians, u);
+  mgEq = gequilibrium_moments(curr_state, mu, u);
 
   for (int i=0; i<nvel; ++i) {
     mf(i) = mf(i) - 1./tau_r * (mf(i) - mfEq(i));
