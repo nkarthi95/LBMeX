@@ -13,7 +13,8 @@ n_sci_start = 4000
 dump_hydro = 1
 n_hydro = 500
 dump_SF = 1
-n_SF = 500
+n_SF = 1000
+n_checkpoint = 25000
 start_step = 0
 output_hdf5 = 0
 
