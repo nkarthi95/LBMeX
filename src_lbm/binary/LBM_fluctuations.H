@@ -12,12 +12,14 @@
 #include <AMReX_GpuComplex.H>
 #include <math.h>
 #include <vector>
+#include <AMReX_Array.H>
 #include "LBM_d3q19.H"
 #include "LBM_FFT.H"
 #include "LBM_thermodynamics.H"
 
 const int ncons = 2 + AMREX_SPACEDIM;
 
+#if 0
 void conv_3d_full(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
                   const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, int NVAR){
   int row, col, dep, krow, kcol, kdep, orow, ocol, odep, kcenterx, kcentery, kcenterz;
@@ -88,9 +90,9 @@ void conv_3d_same(const MultiFab& in_real_mf, const MultiFab& in_imag_mf,
     Dim3 khi = ubound(kernel);
     Dim3 ohi = ubound(out_imag);
 
-    Print() << ihi.x << ihi.y << ihi.z << "\n";
-    Print() << khi.x << khi.y << khi.z << "\n";
-    Print() << ohi.x << ohi.y << ohi.z << "\n";
+    // Print() << ihi.x << ihi.y << ihi.z << "\n";
+    // Print() << khi.x << khi.y << khi.z << "\n";
+    // Print() << ohi.x << ohi.y << ohi.z << "\n";
     
     orow = ohi.x; ocol = ohi.y; odep = ohi.z;
     row = ihi.x; col = ihi.y; dep = ihi.z;
@@ -103,7 +105,6 @@ void conv_3d_same(const MultiFab& in_real_mf, const MultiFab& in_imag_mf,
       for(int i = 0; i <= orow; i++){
         for(int j = 0; j <= ocol; j++){
           for(int k = 0; k <= odep; k++){
-            Print() << "i:" << i << " j:" << j << " k:" << k << "\n";
             for(int m = 0; m <= krow; m++){
               for(int n = 0; n <= kcol; n++){
                 for(int l = 0; l <= kdep; l++){
@@ -129,12 +130,128 @@ void conv_3d_same(const MultiFab& in_real_mf, const MultiFab& in_imag_mf,
 void convolve_3D(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
                  const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, 
                  std::string mode, int NVAR){
-    if(mode == "same"){conv_3d_same(in_real_mf,in_imag_mf, kernel_mf, 
+    
+
+    if(mode == "same"){
+      conv_3d_same(in_real_mf,in_imag_mf, kernel_mf, 
                                     out_real_mf, out_imag_mf, NVAR);}
     else if(mode == "full"){conv_3d_full(in_real_mf,in_imag_mf, kernel_mf, 
                                     out_real_mf, out_imag_mf, NVAR);}
     else{throw std::invalid_argument( "convolution mode is invalid" );exit(-1);}
 }
+#endif
+
+void conv_3d_full(const Array3D<Real>& in_real, const Array3D<Real>& in_imag, 
+                  const Array3D<Real>& kernel, Array3D<Real>& out_real, Array3D<Real>& out_imag){
+  
+  const int orow = out_real.xlen(); const int ocol = out_real.ylen(); const int odep = out_real.zlen();
+  const int krow = kernel.xlen(); const int kcol = kernel.ylen(); const int kdep = kernel.zlen();
+  const int row = in_real.xlen(); const int col = in_real.ylen(); const int dep = in_real.zlen();
+  
+  const int kcenterx = krow/2; const int kcentery = kcol/2; const int kcenterz = kdep/2;
+  const int system_volume = row*col*dep;
+
+  int ri, rj, rk;
+
+  for(int i = 0; i <= orow; i++){
+    for(int j = 0; j <= ocol; j++){
+      for(int k = 0; k <= odep; k++){
+        for(int m = 0; m <= krow; m++){
+          for(int n = 0; n <= kcol; n++){
+            for(int l = 0; l <= kdep; l++){
+              ri = i - m;
+              rj = j - n;
+              rk = k - l;
+              if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 and rk < dep){
+                out_real(i,j,k) += in_real(rj,rj,rk)*kernel(m,n,l)/system_volume;
+                out_imag(i,j,k) += in_imag(rj,rj,rk)*kernel(m,n,l)/system_volume;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void conv_3d_same(const Array3D<Real>& in_real, const Array3D<Real>& in_imag, 
+                  const Array3D<Real>& kernel, Array3D<Real>& out_real, Array3D<Real>& out_imag){
+
+  const int orow = out_real.xlen(); const int ocol = out_real.ylen(); const int odep = out_real.zlen();
+  const int krow = kernel.xlen(); const int kcol = kernel.ylen(); const int kdep = kernel.zlen();
+  const int row = in_real.xlen(); const int col = in_real.ylen(); const int dep = in_real.zlen();
+  
+  const int kcenterx = krow/2; const int kcentery = kcol/2; const int kcenterz = kdep/2;
+  const int system_volume = row*col*dep;
+
+  int ri, rj, rk;
+
+  for(int i = 0; i <= orow; i++){
+    for(int j = 0; j <= ocol; j++){
+      for(int k = 0; k <= odep; k++){
+        for(int m = 0; m <= krow; m++){
+          for(int n = 0; n <= kcol; n++){
+            for(int l = 0; l <= kdep; l++){
+              ri = i + (m - kcenterx);
+              rj = j + (n - kcentery);
+              rk = k + (l - kcenterz);
+              if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 and rk < dep){
+                out_real(i,j,k) += in_real(rj,rj,rk)*kernel(m,n,l)/system_volume;
+                out_imag(i,j,k) += in_imag(rj,rj,rk)*kernel(m,n,l)/system_volume;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void convolve_3D(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
+                 const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, 
+                 std::string mode, int comp, const Box& domain_in, const Box& domain_out){
+    
+    IntVect iBoxdims = domain_in.length();
+    IntVect oBoxdims = domain_out.length();
+    const in row = iBoxdims(0); const in col = iBoxdims(1); const in dep = iBoxdims(2);
+    const in nrow = oBoxdims(0); const in ncol = oBoxdims(1); const in ndep = 2*oBoxdims(2);
+
+    Array3D<Real, 0, row, 0, col, 0, dep, Order::C> in_real_arr;
+    Array3D<Real, 0, row, 0, col, 0, dep, Order::C> in_imag_ar;
+    Array3D<Real, 0, row, 0, col, 0, dep, Order::C> kernel_ar;
+    Array3D<Real, 0, nrow, 0, ncol, 0, ndep, Order::C> out_real_arr;
+    Array3D<Real, 0, nrow, 0, ncol, 0, ndep, Order::C> out_imag_arr;
+
+    for (MFIter mfi(in_real_mf); mfi.isValid(); ++mfi) {
+      Array4<Real const> const in_real = in_real_mf.const_array(mfi);
+      Array4<Real const> const in_imag = in_imag_mf.const_array(mfi);
+      Array4<Real const> const kernel =  kernel_mf.const_array(mfi);
+
+      ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+        in_real_arr(x,y,z) = in_real(x,y,z,comp);
+        in_imag_arr(x,y,z) = in_imag(x,y,z,comp);
+        kernel_arr(x,y,z) = kernel(x,y,z,comp);
+    });
+    }
+
+    if(mode == "same"){
+      conv_3d_full(in_real_arr,in_imag_arr, kernel_arr, out_real_arr, out_imag_arr);
+    }else if(mode == "full"){
+      conv_3d_full(in_real_arr,in_imag_arr, kernel_arr, out_real_arr, out_imag_arr);
+    } else{throw std::invalid_argument( "convolution mode is invalid" );exit(-1);}
+
+    for (MFIter mfi(out_real_mf); mfi.isValid(); ++mfi) {
+      Array4<Real const> const out_real = out_real_mf.const_array(mfi);
+      Array4<Real const> const out_imag = out_imag_mf.const_array(mfi);
+
+      ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+        out_real(x,y,z,comp) = out_real_arr(x,y,z);
+        out_imag(x,y,z,comp) = out_imag_arr(x,y,z);
+    });
+    }
+
+}
+
 
 // Cholesky decomposition of matrix A
 // result is stored in lower triangle of A
@@ -300,32 +417,33 @@ inline void generate_kspace_noise(const Geometry& geom,
   // }
   // Print() << "x:" << domain2.length()[0] << " y:" << domain2.length()[1] << " z:" << domain2.length()[2] << "\n";
   // Print() << "x:" << domain2.length(0) << " y:" << domain2.length(1) << " z:" << domain2.length(2) << "\n";
-  convolve_3D(fft_real, fft_imag, kernel, conv_real, conv_imag, mode, nvar);
+  // convolve_3D(fft_real, fft_imag, kernel, conv_real, conv_imag, mode, nvar);
+  convolve_3D(fft_real, fft_imag, kernel, conv_real, conv_imag, mode, 0, domain, domain2);
 
   // conv_real.mult(1./system_volume, 0, nvar); conv_imag.mult(1./system_volume, 0, nvar);
 
-  for (MFIter mfi(fft_real); mfi.isValid(); ++mfi){
-    const Box& box = mfi.validbox();
-    const Array4<Real>& xi_real = conv_real.array(mfi);
-    const Array4<Real>& xi_imag = conv_imag.array(mfi);
-    const Array4<Real>& r = ref_params.array(mfi);
+  // for (MFIter mfi(conv_real); mfi.isValid(); ++mfi){
+  //   const Box& box = mfi.validbox();
+  //   const Array4<Real>& xi_real = conv_real.array(mfi);
+  //   const Array4<Real>& xi_imag = conv_imag.array(mfi);
+  //   const Array4<Real>& r = ref_params.array(mfi);
 
-    ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
-      if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
-	      // compute correlated noise in k-space
-        if (ky == 0 && kz == 0){
-          Print() << "kx:" << kx << " rho:" << r(kx, ky, kz, 0) << " rhok_r:" << xi_real(kx, ky, kz, 0) << " rhok_i:" << xi_imag(kx, ky, kz, 0) << "\n";
-          Print() << "kx:" << kx << " phi:" << r(kx, ky, kz, 1) << " phik_r:" << xi_real(kx, ky, kz, 1) << " phik_i:" << xi_imag(kx, ky, kz, 1) << "\n";
-        }
-      }
-    });
-  }
+  //   ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
+  //     if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
+	//       // compute correlated noise in k-space
+  //       if (ky == 0 && kz == 0){
+  //         Print() << "kx:" << kx << " rho:" << r(kx, ky, kz, 0) << " rhok_r:" << xi_real(kx, ky, kz, 0) << " rhok_i:" << xi_imag(kx, ky, kz, 0) << "\n";
+  //         Print() << "kx:" << kx << " phi:" << r(kx, ky, kz, 1) << " phik_r:" << xi_real(kx, ky, kz, 1) << " phik_i:" << xi_imag(kx, ky, kz, 1) << "\n";
+  //       }
+  //     }
+  //   });
+  // }
 
-  MultiFab::Copy(kref, conv_real, 0, 0, nvar, nghost);
-  MultiFab::Copy(kref_imag, conv_imag, 0, 0, nvar, nghost);
-  MultiFab::Multiply(kref, conv_real, 0, 0, nvar, nghost); //squaring 
-  MultiFab::Multiply(kref_imag, conv_imag, 0, 0, nvar, nghost); // squaring
-  MultiFab::Subtract(kref, conv_imag, 0, 0, nvar, nghost); // multiplying convolution by its conjugate for reference state
+  MultiFab::Copy(kref, conv_real, 0, 0, nvar, nghost); //copy works fine
+  MultiFab::Copy(kref_imag, conv_imag, 0, 0, nvar, nghost); //copy works fine
+  MultiFab::Multiply(kref, conv_real, 0, 0, nvar, nghost); //squaring. Checked to work
+  MultiFab::Multiply(kref_imag, conv_imag, 0, 0, nvar, nghost); // squaring. Checked to work
+  MultiFab::Subtract(kref, kref_imag, 0, 0, nvar, nghost); // multiplying convolution by its conjugate for reference state which acts as (a + b)*(a - b). Works
   // convolution //
   
   // generate noise in whole box because of grid decomposition
