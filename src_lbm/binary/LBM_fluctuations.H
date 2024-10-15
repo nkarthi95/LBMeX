@@ -18,6 +18,124 @@
 
 const int ncons = 2 + AMREX_SPACEDIM;
 
+void conv_3d_full(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
+                  const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, int NVAR){
+  int row, col, dep, krow, kcol, kdep, orow, ocol, odep, kcenterx, kcentery, kcenterz;
+  int ri, rj, rk, system_volume;
+
+  for (MFIter mfi(in_real_mf); mfi.isValid(); ++mfi) {
+    Array4<Real const> const in_real = in_real_mf.const_array(mfi);
+    Array4<Real const> const in_imag = in_imag_mf.const_array(mfi);
+    Array4<Real const> const kernel =  kernel_mf.const_array(mfi);
+    Array4<Real> const& out_real =  out_real_mf.array(mfi);
+    Array4<Real> const& out_imag =  out_imag_mf.array(mfi);
+
+    Dim3 ihi = ubound(in_imag);
+    Dim3 khi = ubound(kernel);
+    Dim3 ohi = ubound(out_imag);
+
+    Print() << ihi.x << ihi.y << ihi.z << "\n";
+    Print() << khi.x << khi.y << khi.z << "\n";
+    Print() << ohi.x << ohi.y << ohi.z << "\n";
+
+    orow = ohi.x; ocol = ohi.y; odep = ohi.z;
+    row = ihi.x; col = ihi.y; dep = ihi.z;
+    krow = khi.x; kcol = khi.y; kdep = khi.z;
+
+    system_volume = row*col*dep;
+
+    for(int idx = 0; idx < NVAR; idx++){
+      for(int i = 0; i < orow; i++){
+        for(int j = 0; j < ocol; j++){
+          for(int k = 0; k < odep; k++){
+            for(int m = 0; m < krow; m++){
+              for(int n = 0; n < kcol; n++){
+                for(int l = 0; l < kdep; l++){
+                  ri = i - m;
+                  rj = j - n;
+                  rk = k - l;
+                  if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 and rk < dep){
+                    out_real(i,j,k,idx) += in_real(rj,rj,rk,idx)*kernel(m,n,l,idx)/system_volume;
+                    out_imag(i,j,k,idx) += in_imag(rj,rj,rk,idx)*kernel(m,n,l,idx)/system_volume;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    //MFIter loop end
+  }
+}
+
+void conv_3d_same(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
+                  const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, int NVAR){
+                    // to do
+                    // adapt function to use multifabs to make steps later on easier
+  int row, col, dep, krow, kcol, kdep, orow, ocol, odep, kcenterx, kcentery, kcenterz;
+  int ri, rj, rk;
+  Real system_volume;
+
+  for (MFIter mfi(in_real_mf); mfi.isValid(); ++mfi) {
+    Array4<Real const> const in_real = in_real_mf.const_array(mfi);
+    Array4<Real const> const in_imag = in_imag_mf.const_array(mfi);
+    Array4<Real const> const kernel =  kernel_mf.const_array(mfi);
+    Array4<Real> const& out_real =  out_real_mf.array(mfi);
+    Array4<Real> const& out_imag =  out_imag_mf.array(mfi);
+
+    Dim3 ihi = ubound(in_imag);
+    Dim3 khi = ubound(kernel);
+    Dim3 ohi = ubound(out_imag);
+
+    Print() << ihi.x << ihi.y << ihi.z << "\n";
+    Print() << khi.x << khi.y << khi.z << "\n";
+    Print() << ohi.x << ohi.y << ohi.z << "\n";
+    
+    orow = ohi.x; ocol = ohi.y; odep = ohi.z;
+    row = ihi.x; col = ihi.y; dep = ihi.z;
+    krow = khi.x; kcol = khi.y; kdep = khi.z;
+
+    system_volume = row*col*dep;
+    kcenterx = krow/2; kcentery = kcol/2; kcenterz = kdep/2;
+
+    for(int idx = 0; idx < NVAR; idx++){
+      for(int i = 0; i <= orow; i++){
+        for(int j = 0; j <= ocol; j++){
+          for(int k = 0; k <= odep; k++){
+            Print() << "i:" << i << " j:" << j << " k:" << k << "\n";
+            for(int m = 0; m <= krow; m++){
+              for(int n = 0; n <= kcol; n++){
+                for(int l = 0; l <= kdep; l++){
+                  ri = i + (m - kcenterx);
+                  rj = j + (n - kcentery);
+                  rk = k + (l - kcenterz);
+                  if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 and rk < dep){
+                    out_real(i,j,k,idx) += in_real(rj,rj,rk,idx)*kernel(m,n,l,idx)/system_volume;
+                    out_imag(i,j,k,idx) += in_imag(rj,rj,rk,idx)*kernel(m,n,l,idx)/system_volume;
+                    
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    //MFIter loop end
+  }
+}
+
+void convolve_3D(const MultiFab& in_real_mf, const MultiFab& in_imag_mf, 
+                 const MultiFab& kernel_mf, MultiFab& out_real_mf, MultiFab& out_imag_mf, 
+                 std::string mode, int NVAR){
+    if(mode == "same"){conv_3d_same(in_real_mf,in_imag_mf, kernel_mf, 
+                                    out_real_mf, out_imag_mf, NVAR);}
+    else if(mode == "full"){conv_3d_full(in_real_mf,in_imag_mf, kernel_mf, 
+                                    out_real_mf, out_imag_mf, NVAR);}
+    else{throw std::invalid_argument( "convolution mode is invalid" );exit(-1);}
+}
+
 // Cholesky decomposition of matrix A
 // result is stored in lower triangle of A
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -84,17 +202,18 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
   BL_PROFILE_VAR("correlated_noise()",correlated_noise);
   GpuArray<GpuComplex<Real>,ndof> r, xi;
   GpuArray<Real,ndof*ndof> C;
+  Real k2;
   // GpuArray<GpuComplex<Real>,ndof*ndof> C;
+  if (use_correlated_noise){k2 = fourier_laplace_operator(kx, ky, kz, domain);}
+  else{k2 = 0.;}
 
   // // Cholesky decomposition of noise covariance matrix
   const Real rho0 = hydrovs_ref(kx, ky, kz, 0);
   const Real phi0 = hydrovs_ref(kx, ky, kz, 1);
-  const Real k2 = fourier_laplace_operator(kx, ky, kz, domain);
-  #if AMREX_DEBUG
-    if (ky == 0 and kz == 0){Print() << "kx:" << kx << " rho:" << rho0 << " phi:" << phi0 << " k2:" << k2 << "\n"}
-  #endif
+  // if (ky == 0 and kz == 0){Print() << "kx:" << kx << " rho:" << rho0 << " phi:" << phi0 << " k2:" << k2 << "\n";}
     // if(ky == 0 and kz == 0){Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " phi:" << phi0 << " convolution:" << phi_conv << "\n";
                           // Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " rho:" << rho0 << " convolution:" << rho_conv << "\n";}
+  
   C = noise_covariance(rho0, phi0, k2);
 
   #ifdef AMREX_USE_CUDA
@@ -146,7 +265,68 @@ inline void generate_kspace_noise(const Geometry& geom,
           MultiFab& ref_params) {
   BL_PROFILE_VAR("generate_kspace_noise()",generate_kspace_noise);
   
-  const Box domain = geom.Domain(); 
+  const Box domain = geom.Domain();
+  const int nvar = 2; const int nghost = 0; const Real system_volume = domain.length(0)*domain.length(1)*domain.length(2);
+  BoxArray ba2 = kspace_noise_real.boxArray();
+  DistributionMapping dm2 = kspace_noise_real.DistributionMap();
+  Box domain2(IntVect{0,0,0}, IntVect{domain.length(0), domain.length(1), domain.length(2)});
+  // Print() << "x:" << domain.length(0) << " y:" << domain.length(1) << " z:" << domain.length(2) << "\n";
+
+  // FFT //
+  MultiFab fft_real(ba2, dm2, nvar, nghost);
+  MultiFab fft_imag(ba2, dm2, nvar, nghost);  
+  compute_fft(geom, ref_params, fft_real, fft_imag, nvar, false); //output is correct. Normalization is 1/boxVol
+  // FFT //
+  
+  // convolution //
+  std::string mode = "same";
+  MultiFab kernel(ba2, dm2, nvar, nghost);
+  kernel.setVal(1.);
+
+  MultiFab kref(ba2, dm2, nvar, nghost); kref.setVal(0.);
+  MultiFab kref_imag(ba2, dm2, nvar, nghost); kref_imag.setVal(0.);
+  MultiFab conv_real(ba2, dm2, nvar, nghost); conv_real.setVal(0.);
+  MultiFab conv_imag(ba2, dm2, nvar, nghost); conv_imag.setVal(0.);
+  // if(mode == "full"){
+  //   Print() << "Full mode convolution\n";
+  //   IntVect n = domain.length();
+  //   Box domain2(IntVect{0,0,0}, IntVect{2*domain.length(0)-1, 2*domain.length(1)-1, 2*domain.length(2)-1});
+  //   BoxArray ba2(domain2);
+  //   DistributionMapping dm2(ba2);
+  //   MultiFab kref(ba2, dm2, nvar, nghost);
+  //   MultiFab kref_imag(ba2, dm2, nvar, nghost);
+  //   MultiFab conv_real(ba2, dm2, nvar, nghost);
+  //   MultiFab conv_imag(ba2, dm2, nvar, nghost);
+  // }
+  // Print() << "x:" << domain2.length()[0] << " y:" << domain2.length()[1] << " z:" << domain2.length()[2] << "\n";
+  // Print() << "x:" << domain2.length(0) << " y:" << domain2.length(1) << " z:" << domain2.length(2) << "\n";
+  convolve_3D(fft_real, fft_imag, kernel, conv_real, conv_imag, mode, nvar);
+
+  // conv_real.mult(1./system_volume, 0, nvar); conv_imag.mult(1./system_volume, 0, nvar);
+
+  for (MFIter mfi(fft_real); mfi.isValid(); ++mfi){
+    const Box& box = mfi.validbox();
+    const Array4<Real>& xi_real = conv_real.array(mfi);
+    const Array4<Real>& xi_imag = conv_imag.array(mfi);
+    const Array4<Real>& r = ref_params.array(mfi);
+
+    ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
+      if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
+	      // compute correlated noise in k-space
+        if (ky == 0 && kz == 0){
+          Print() << "kx:" << kx << " rho:" << r(kx, ky, kz, 0) << " rhok_r:" << xi_real(kx, ky, kz, 0) << " rhok_i:" << xi_imag(kx, ky, kz, 0) << "\n";
+          Print() << "kx:" << kx << " phi:" << r(kx, ky, kz, 1) << " phik_r:" << xi_real(kx, ky, kz, 1) << " phik_i:" << xi_imag(kx, ky, kz, 1) << "\n";
+        }
+      }
+    });
+  }
+
+  MultiFab::Copy(kref, conv_real, 0, 0, nvar, nghost);
+  MultiFab::Copy(kref_imag, conv_imag, 0, 0, nvar, nghost);
+  MultiFab::Multiply(kref, conv_real, 0, 0, nvar, nghost); //squaring 
+  MultiFab::Multiply(kref_imag, conv_imag, 0, 0, nvar, nghost); // squaring
+  MultiFab::Subtract(kref, conv_imag, 0, 0, nvar, nghost); // multiplying convolution by its conjugate for reference state
+  // convolution //
   
   // generate noise in whole box because of grid decomposition
   // (generating noise without grid decomposition may be faster)
@@ -155,6 +335,7 @@ inline void generate_kspace_noise(const Geometry& geom,
     const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
     const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
     const Array4<Real>& r = ref_params.array(mfi);
+    const Array4<Real>& kr = kref.array(mfi);
 
     // construct noise in k-space
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
@@ -162,6 +343,7 @@ inline void generate_kspace_noise(const Geometry& geom,
         GpuArray<GpuComplex<Real>,ndof> xi = {};
 	      // compute correlated noise in k-space
 	      xi = correlated_noise(kx,ky,kz,domain,engine,r);
+        // if (ky == 0 && kz == 0){Print() << "kx:" << kx << " rhok:" << kr(kx, ky, kz, 0) << " phik:" << kr(kx, ky, kz, 1) << "\n";}
 
         for (int i=0; i<ndof; ++i) {
           xi_real(kx,ky,kz,i) = xi[i].real();
@@ -170,8 +352,10 @@ inline void generate_kspace_noise(const Geometry& geom,
       }
     });
   }
+
 }
 
+#if 0
 // compute spatially uncorrelated noise vector from Gaussian random variables
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const RandomEngine& engine) {
@@ -206,7 +390,7 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
   #endif
 
   // random white noise
-  for (int i=ncons+1; i<ndof; ++i) {
+  for (int i=ncons; i<ndof; ++i) {
     r[i] = RandomNormal(0., 1., engine);
   }
 
@@ -236,6 +420,7 @@ inline void generate_realspace_noise(const Geometry& geom, MultiFab& hydrovs, Mu
     });
   }
 }
+#endif
 
 // LB thermalization procedure for spatially correlated, non-diagonal noise
 inline void generate_fluctuations(const Geometry& geom,
@@ -252,22 +437,23 @@ inline void generate_fluctuations(const Geometry& geom,
   kspace_noise_imag.setVal(0.);
 
   // TODO: check if this takes care of ndof entries!?
+  generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
+  compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
+  // if (use_correlated_noise){
+  //   // generate noise in k-space
+  //   // Print() << "Correlated noise\n";
+  //   generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
+  //   // note that the k-space noise is generated without the required symmetries
+  //   // (this is to allow for parallel generation of noise)
+  //   // the k-space symmetries are handled when copying in compute_ifft
 
-  if (use_correlated_noise){
-    // generate noise in k-space
-    // Print() << "Correlated noise\n";
-    generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
-    // note that the k-space noise is generated without the required symmetries
-    // (this is to allow for parallel generation of noise)
-    // the k-space symmetries are handled when copying in compute_ifft
-
-    // inverse Fourier transform noise vector to real space
-    compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
-  }
-  else{
-    // Print() << "Uncorrelated noise\n";
-    generate_realspace_noise(geom, ref_params, noise);
-  }
+  //   // inverse Fourier transform noise vector to real space
+  //   compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
+  // }
+  // else{
+  //   // Print() << "Uncorrelated noise\n";
+  //   generate_realspace_noise(geom, ref_params, noise);
+  // }
 
 }
 #endif

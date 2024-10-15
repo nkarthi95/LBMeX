@@ -18,6 +18,7 @@ void main_driver(const char* argv) {
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
   
+  const std::string dist_plt = "xi_plt_";
   const std::string hydro_plt = "hydro_plt_";
   const std::string SF_plt = "SF_plt";
   const std::string hydro_chk = "chk_hydro_";
@@ -86,9 +87,9 @@ void main_driver(const char* argv) {
   ba.maxSize(max_grid_size);
   DistributionMapping dm(ba);
   // need two halo layers for gradients
-  int nghost = 2;
   Real time = start_step;
-
+  const int nghost = 2;
+  
   // set up MultiFabs
   MultiFab fold(ba, dm, nvel, nghost);
   MultiFab fnew(ba, dm, nvel, nghost);
@@ -157,7 +158,10 @@ void main_driver(const char* argv) {
       WriteCheckPoint(step, mf_checkpoint, hydro_chk);
     }
     
-    if (dump_hydro == 1 && step%n_hydro == 0){WriteOutput(step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);}
+    if (dump_hydro == 1 && step%n_hydro == 0){
+      WriteOutput(step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);
+      WriteOutput(step, noise, geom, dist_plt, 2*nvel, output_hdf);
+      }
 
     if(dump_SF == 1 && step%n_SF == 0 && temperature > 0){
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);

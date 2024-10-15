@@ -253,8 +253,8 @@ void compute_fft(const Geometry& geom,
                     }
                 }
 
-                realpart(i,j,k) /= sqrtnpts;
-                imagpart(i,j,k) /= sqrtnpts;
+                realpart(i,j,k) /= npts;
+                imagpart(i,j,k) /= npts;
             });
 
             /*

@@ -1,28 +1,29 @@
 # box parameters
-nx = 32
-ny = 2
-nz = 512
-max_grid_size_x = 8
-max_grid_size_y = 2
-max_grid_size_z = 128
+nx = 16
+ny = 16
+nz = 16
+max_grid_size_x = 16
+max_grid_size_y = 16
+max_grid_size_z = 16
 init_cond = 10
 
 # time parameters
-nsteps = 100000
-n_sci_start = 90000
+nsteps = 50000
+n_sci_start = 40000
 dump_hydro = 1
-n_hydro = 50
-dump_SF = 0
-n_SF = 500
-start_step = 20000
-output_hdf5 = 1
+n_hydro = 500
+dump_SF = 1
+n_SF = 1000
+n_checkpoint = 10000
+start_step = 5000
+output_hdf5 = 0
 
 # model parameters
-lambda = 1.1
-T = 0.5
-kappa = 0.03
+lambda = 0.4
+T = 0.25
+kappa = 0.01
 gamma = 1.0
 
 # noise parameters
 temperature = 1e-7
-correlated_noise = 1
+correlated_noise = 0

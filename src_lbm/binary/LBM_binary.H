@@ -11,11 +11,9 @@ Real fb(Real initialGuess, double tolerance, int maxIterations) {
     const Real rho = 1.;
     bulk_free_energy curr_state(rho, x);
     for (int i = 0; i < maxIterations; ++i) {
-        // Real fx = -(chi/2.)*(x/1.) + (T/2.)*log((1. + x/1.)/(1. - x/1.));
-        // Real dfx = (-2.*T*pow(rho, 2) - chi*pow(x, 2) + chi*pow(rho, 2))/(2.*rho*(pow(x, 2) - pow(rho, 2)));
         Real fx = curr_state.calculate_df_dphi();
-        Real dfx = curr_state.calculate_dmup_drho();
-        
+        Real dfx = curr_state.calculate_dmup_dphi();
+
         // Prevent division by zero
         if (dfx == 0.0) {
           Print() << "Divide by 0 encountered in Newton Raphson\n" << std::endl;
@@ -39,15 +37,13 @@ Real fb(Real initialGuess, double tolerance, int maxIterations) {
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,2> chemical_potentials(bulk_free_energy curr_state,
+Array1D<Real,0,2> chemical_potentials(bulk_free_energy& curr_state,
 				  const Array1D<RealVect,0,2>& gradients,
           const Array1D<Real,0,2>& laplacians) {
   // const Real rho = fields(0);
   // const Real phi = fields(1);
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
-
-  // bulk_free_energy curr_state(rho, phi);
 
   Array1D<Real,0,2> mu = { 0.0, 0.0 } ;
   #if 0
@@ -116,7 +112,7 @@ Array1D<Real,0,nvel> fequilibrium(const Array1D<Real,0,2>& fields,
 #endif
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,nvel> fequilibrium_moments(bulk_free_energy curr_state,
+Array1D<Real,0,nvel> fequilibrium_moments(bulk_free_energy& curr_state,
 			      const Array1D<RealVect,0,2>& gradients,
 			      const Array1D<Real,0,2>& laplacians,
 			      const RealVect& u) {
@@ -201,7 +197,7 @@ Array1D<Real,0,nvel> gequilibrium(const Real& phi,
 #endif
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,nvel> gequilibrium_moments(bulk_free_energy curr_state,
+Array1D<Real,0,nvel> gequilibrium_moments(bulk_free_energy& curr_state,
 				   const Array1D<Real,0,2>& mu,
 				   const RealVect& u) {
   Array1D<Real,0,nvel> mEq;
@@ -265,10 +261,15 @@ void relax_moments(int x, int y, int z,
   mfEq = fequilibrium_moments(curr_state, gradients, laplacians, u);
   mgEq = gequilibrium_moments(curr_state, mu, u);
 
+  // const int idx = 0;
+  // Print() << "Pre collision phi:" << mg(idx) << " phi_eq:" << mgEq(idx) << "mg - mgeq: " << mg(idx) - mgEq(idx) << "\n";
+
   for (int i=0; i<nvel; ++i) {
     mf(i) = mf(i) - 1./tau_r * (mf(i) - mfEq(i));
     mg(i) = mg(i) - 1./tau_p * (mg(i) - mgEq(i));
   }
+
+  // Print() << "Post collision phi:" << mg(idx) << " phi_eq:" << mgEq(idx) << "mg - mgeq: " << mg(idx) - mgEq(idx) << "\n";
 
 }
 
@@ -453,6 +454,7 @@ inline void LBM_init_mixture(MultiFab& mf,
       Real phi = 0.0;
       // phi = C1+0.001*RandomNormal(0., 1., engine);
       phi = 0.001*RandomNormal(0., 1., engine);
+      // Print() << phi << "\n";
       r(x, y, z, 0) = rho;
       r(x, y, z, 1) = 0;
       for (int i=0; i<nvel; i++) {
@@ -472,7 +474,7 @@ inline void LBM_init_flat_interface(const Geometry& geom,
             MultiFab& ref_params) {
   
   const IntVect box = geom.Domain().length();
-  Real phi0 = fb(0.6, pow(10, -7), 1000);
+  Real phi0 = fb(0.55, pow(10, -7), 10);
   const Real xi = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi0*phi0)));
   // const Real b = -(pow(chi, 2.350)/(pow(kappa, 0.640)*pow(T, 5.559)*489.435));
   const Real intLoc = (Real(box[0]) - 1.)/2.;
