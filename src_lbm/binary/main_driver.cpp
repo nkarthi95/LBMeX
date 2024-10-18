@@ -160,7 +160,7 @@ void main_driver(const char* argv) {
     
     if (dump_hydro == 1 && step%n_hydro == 0){
       WriteOutput(step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);
-      WriteOutput(step, noise, geom, dist_plt, 2*nvel, output_hdf);
+      // WriteOutput(step, noise, geom, dist_plt, 2*nvel, output_hdf);
       }
 
     if(dump_SF == 1 && step%n_SF == 0 && temperature > 0){

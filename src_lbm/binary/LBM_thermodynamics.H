@@ -70,7 +70,6 @@ struct bulk_free_energy {
 
 };
 
-#if 0
 // noise covariance matrix of the LB modes
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, const Real k2) {
@@ -81,10 +80,16 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
 
     bulk_free_energy curr_state(rho0, phi0);
     const Real cs2 = curr_state.sound_speed_square() + kappa*k2*rho0;
-    // const Real mu_rho = curr_state.calculate_dmur_drho() + k2*kappa;
-    const Real mu_rho = curr_state.calculate_dmup_drho();
+    // const Real mu_rho = curr_state.calculate_dmup_drho();
+    const Real mu_rho = 0.;
     const Real mu_phi = curr_state.calculate_dmup_dphi() + k2*kappa;
     const Real p_phi = k2*kappa*phi0;
+    
+    // Print() << "rho:" << rho0 << " phi:" << phi0 << " k2:" << k2 << "\n";
+    // Print() << "cs2: " << cs2 << "\n";
+    // Print() << "mu_rho: " << mu_rho << "\n";
+    // Print() << "mu_phi: " << mu_phi << "\n";
+    // Print() << "p_phi: " << p_phi << "\n";
 
     // TODO: generalize to MRT
     const Real lambdaLB_r = -1./tau_r;
@@ -173,8 +178,8 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
 
   return Xi;
 }
-#endif
 
+#if 0
 GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, const Real k2) { // TODO: add function arguments: rho, phi, k, others?
     BL_PROFILE_VAR("noise_covariance()",noise_covariance);
     // Print() << "Continuous covariance matrix\n";
@@ -272,6 +277,6 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
 
   return Xi;
 }
-
+#endif
 
 #endif
