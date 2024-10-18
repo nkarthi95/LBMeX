@@ -268,6 +268,7 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
   GpuArray<GpuComplex<Real>,ndof> r, xi;
   GpuArray<Real,ndof*ndof> C;
   Real k2;
+  const int Q = nvel;
   // GpuArray<GpuComplex<Real>,ndof*ndof> C;
   if (use_correlated_noise){k2 = fourier_laplace_operator(kx, ky, kz, domain);}
   else{k2 = 0.;}
@@ -280,6 +281,10 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
                           // Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " rho:" << rho0 << " convolution:" << rho_conv << "\n";}
   
   C = noise_covariance(rho0, phi0, k2);
+  // Print() << "Before cholesky decomposition\n";
+  // Print() << "Xi[23,8]:" << C[(Q+ 4)*ndof+(   8)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+  // Print() << "Xi[23,20]:" << C[(Q+ 4)*ndof+(Q+ 1)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+  // Print() << "Xi[23,0]:" << C[(Q+ 4)*ndof+(   0)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
 
   #ifdef AMREX_USE_CUDA
     cholesky_decomp(C,ndof,ncons);
@@ -305,6 +310,10 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
     }
     // // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
   #endif
+  // Print() << "After cholesky decomposition\n";
+  // Print() << "Xi[23,8]:" << C[(Q+ 4)*ndof+(   8)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+  // Print() << "Xi[23,20]:" << C[(Q+ 4)*ndof+(Q+ 1)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+  // Print() << "Xi[23,0]:" << C[(Q+ 4)*ndof+(   0)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
   // possibly the case if C(k) != C(-k) [uschill 07/27/2022]

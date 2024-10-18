@@ -80,8 +80,8 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
 
     bulk_free_energy curr_state(rho0, phi0);
     const Real cs2 = curr_state.sound_speed_square() + kappa*k2*rho0;
-    // const Real mu_rho = curr_state.calculate_dmup_drho();
-    const Real mu_rho = 0.;
+    const Real mu_rho = curr_state.calculate_dmup_drho();
+    // const Real mu_rho = 0.;
     const Real mu_phi = curr_state.calculate_dmup_dphi() + k2*kappa;
     const Real p_phi = k2*kappa*phi0;
     
@@ -159,12 +159,13 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
     Xi[(Q+ 1)*ndof+(Q+ 4)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
     Xi[(Q+ 4)*ndof+(Q+ 1)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
     Xi[(Q+ 1)*ndof+(Q+16)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
-    Xi[(Q+16)*ndof+(Q+ 1)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+    Xi[(Q+16)*ndof+(Q+ 1)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);\
 
     Xi[(   0)*ndof+(Q+ 4)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
     Xi[(Q+ 4)*ndof+(   0)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
     Xi[(   0)*ndof+(Q+16)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
     Xi[(Q+16)*ndof+(   0)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
+
     Xi[(   1)*ndof+(Q+ 1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
     Xi[(Q+ 1)*ndof+(   1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
     Xi[(   1)*ndof+(   8)] = -3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
@@ -175,6 +176,10 @@ GpuArray<Real,ndof*ndof> noise_covariance(const Real rho0, const Real phi0, cons
     Xi[(   5)*ndof+(   2)] = -phi0*kT*lambda_pr;
     Xi[(   6)*ndof+(   3)] = -phi0*kT*lambda_pr;
     Xi[(   7)*ndof+(   4)] = -phi0*kT*lambda_pr;
+
+    // Print() << "Xi[23,8]:" << Xi[(Q+ 4)*ndof+(   8)] << " Xi[23,23]:" << Xi[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+    // Print() << "Xi[23,20]:" << Xi[(Q+ 4)*ndof+(Q+ 1)] << " Xi[23,23]:" << Xi[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
+    // Print() << "Xi[23,0]:" << Xi[(Q+ 4)*ndof+(   0)] << " Xi[23,23]:" << Xi[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
 
   return Xi;
 }
