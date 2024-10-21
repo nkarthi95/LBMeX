@@ -104,9 +104,6 @@ void main_driver(const char* argv) {
   int nStructVars = 5;
   const Vector<std::string> var_names = VariableNames(nStructVars);
   Vector<Real> var_scaling(nStructVars*(nStructVars+1)/2); var_scaling.assign(var_scaling.size(), 1.);
-  // for (int i=0; i<var_scaling.size(); ++i) {
-  //   if (temperature>0) var_scaling[i] = temperature; else var_scaling[i] = 1.;
-  // }
   StructFact structFact(ba, dm, var_names, var_scaling);
 
   // INITIALIZE
@@ -121,7 +118,6 @@ void main_driver(const char* argv) {
       LBM_init_droplet(R, geom, fold, gold, hydrovs, ref_params);
       break;
     case 10:
-      // checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
       checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
       hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);
       ref_params.ParallelCopy(mf_checkpoint, 2*nvel, 0, 2);
@@ -137,7 +133,6 @@ void main_driver(const char* argv) {
     }
   // checkpoint read of hydrovs to generate fold and gold to be used for further simulations
 
-  // hydrovs.Copy(ref_params, hydrovs, 0, 0, 2, nghost);
   // Write a plotfile of the initial data if plot_int > 0
   if (dump_hydro == 1){WriteOutput(start_step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);}
   Print() << "LB initialized\n";
@@ -150,13 +145,6 @@ void main_driver(const char* argv) {
     if (step >= n_sci_start){
 
     if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
-
-    if (n_checkpoint > 0 && step%n_checkpoint == 0){
-      // WriteCheckPoint(step, hydrovs, hydro_chk);
-      mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
-      mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
-      WriteCheckPoint(step, mf_checkpoint, hydro_chk);
-    }
     
     if (dump_hydro == 1 && step%n_hydro == 0){
       WriteOutput(step, hydrovs, geom, hydro_plt, 2*nvel, output_hdf);
@@ -167,6 +155,12 @@ void main_driver(const char* argv) {
       structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);
       StructFact structFact(ba, dm, var_names, var_scaling);
       }
+    }
+
+    if (n_checkpoint > 0 && step%n_checkpoint == 0){
+      mf_checkpoint.ParallelCopy(hydrovs,0,0,2*nvel);
+      mf_checkpoint.ParallelCopy(ref_params,0,2*nvel,2);
+      WriteCheckPoint(step, mf_checkpoint, hydro_chk);
     }
     Print() << "LB step " << step << " completed\n";
   }

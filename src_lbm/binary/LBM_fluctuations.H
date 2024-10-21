@@ -252,7 +252,6 @@ GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const
     } else {
       // complex Gaussian random variables with zero mean and variance 0.5
       r[i] = { RandomNormal(0., std::sqrt(0.5), engine), RandomNormal(0., std::sqrt(0.5), engine) };
-      // r[i] = { RandomNormal(0., 1., engine), RandomNormal(0., 0., engine) };
     }
   }
   return r;
@@ -269,23 +268,14 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
   GpuArray<Real,ndof*ndof> C;
   Real k2;
   const int Q = nvel;
-  // GpuArray<GpuComplex<Real>,ndof*ndof> C;
   if (use_correlated_noise){k2 = fourier_laplace_operator(kx, ky, kz, domain);}
   else{k2 = 0.;}
 
   // // Cholesky decomposition of noise covariance matrix
   const Real rho0 = hydrovs_ref(kx, ky, kz, 0);
   const Real phi0 = hydrovs_ref(kx, ky, kz, 1);
-  // if (ky == 0 and kz == 0){Print() << "kx:" << kx << " rho:" << rho0 << " phi:" << phi0 << " k2:" << k2 << "\n";}
-    // if(ky == 0 and kz == 0){Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " phi:" << phi0 << " convolution:" << phi_conv << "\n";
-                          // Print() << "kx:" << kx << " ky:" << ky << " kz:" << kz << " rho:" << rho0 << " convolution:" << rho_conv << "\n";}
   
   C = noise_covariance(rho0, phi0, k2);
-  // Print() << "Before cholesky decomposition\n";
-  // Print() << "Xi[23,8]:" << C[(Q+ 4)*ndof+(   8)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
-  // Print() << "Xi[23,20]:" << C[(Q+ 4)*ndof+(Q+ 1)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
-  // Print() << "Xi[23,0]:" << C[(Q+ 4)*ndof+(   0)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
-
   #ifdef AMREX_USE_CUDA
     cholesky_decomp(C,ndof,ncons);
   #else
@@ -310,10 +300,6 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
     }
     // // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
   #endif
-  // Print() << "After cholesky decomposition\n";
-  // Print() << "Xi[23,8]:" << C[(Q+ 4)*ndof+(   8)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
-  // Print() << "Xi[23,20]:" << C[(Q+ 4)*ndof+(Q+ 1)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
-  // Print() << "Xi[23,0]:" << C[(Q+ 4)*ndof+(   0)] << " Xi[23,23]:" << C[(Q+ 4)*ndof+(Q+ 4)] << " rho:" << rho0 << " phi:" << phi0 << "\n";
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
   // possibly the case if C(k) != C(-k) [uschill 07/27/2022]
@@ -409,7 +395,6 @@ inline void generate_kspace_noise(const Geometry& geom,
 
 }
 
-#if 0
 // compute spatially uncorrelated noise vector from Gaussian random variables
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const RandomEngine& engine) {
@@ -474,7 +459,6 @@ inline void generate_realspace_noise(const Geometry& geom, MultiFab& hydrovs, Mu
     });
   }
 }
-#endif
 
 // LB thermalization procedure for spatially correlated, non-diagonal noise
 inline void generate_fluctuations(const Geometry& geom,
@@ -482,32 +466,29 @@ inline void generate_fluctuations(const Geometry& geom,
 				  MultiFab& noise,
           MultiFab& ref_params) {
   BL_PROFILE_VAR("generate_fluctuations()",generate_fluctuations);
-  BoxArray ba = noise.boxArray();
-  DistributionMapping dm = noise.DistributionMap();
-  MultiFab kspace_noise_real(ba, dm, ndof, 0);
-  MultiFab kspace_noise_imag(ba, dm, ndof, 0);
 
-  kspace_noise_real.setVal(0.);
-  kspace_noise_imag.setVal(0.);
+  if (use_correlated_noise){
+    BoxArray ba = noise.boxArray();
+    DistributionMapping dm = noise.DistributionMap();
+    MultiFab kspace_noise_real(ba, dm, ndof, 0);
+    MultiFab kspace_noise_imag(ba, dm, ndof, 0);
 
-  // TODO: check if this takes care of ndof entries!?
-  generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
-  compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
-  // if (use_correlated_noise){
-  //   // generate noise in k-space
-  //   // Print() << "Correlated noise\n";
-  //   generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
-  //   // note that the k-space noise is generated without the required symmetries
-  //   // (this is to allow for parallel generation of noise)
-  //   // the k-space symmetries are handled when copying in compute_ifft
+    kspace_noise_real.setVal(0.);
+    kspace_noise_imag.setVal(0.);
+    // generate noise in k-space
+    // Print() << "Correlated noise\n";
+    generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
+    // note that the k-space noise is generated without the required symmetries
+    // (this is to allow for parallel generation of noise)
+    // the k-space symmetries are handled when copying in compute_ifft
 
-  //   // inverse Fourier transform noise vector to real space
-  //   compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
-  // }
-  // else{
-  //   // Print() << "Uncorrelated noise\n";
-  //   generate_realspace_noise(geom, ref_params, noise);
-  // }
+    // inverse Fourier transform noise vector to real space
+    compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag, ndof);
+  }
+  else{
+    // Print() << "Uncorrelated noise\n";
+    generate_realspace_noise(geom, ref_params, noise);
+  }
 
 }
 #endif
