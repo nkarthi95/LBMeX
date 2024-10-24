@@ -152,7 +152,8 @@ void main_driver(const char* argv) {
       }
 
     if(dump_SF == 1 && step%n_SF == 0 && temperature > 0){
-      structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);
+      // structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);
+      structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt);
       StructFact structFact(ba, dm, var_names, var_scaling);
       }
     }
