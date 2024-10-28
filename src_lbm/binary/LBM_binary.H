@@ -296,8 +296,6 @@ void thermalize_moments(int x, int y, int z,
       const Array4<Real>& noise) {
   // diffusive moments 1,2,3 in noise at 5,6,7
 
-  // const Real discretization_factor_r = sqrt((1. - 0.5/tau_r)); //rho relaxation time
-  // const Real discretization_factor_p = sqrt((1. - 0.5/tau_p)); //phi relaxation time
   const Real discretization_factor_r = 1.;
   const Real discretization_factor_p = 1.;
 
@@ -472,10 +470,13 @@ inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mg,
 				    MultiFab& hydrovs,
             MultiFab& ref_params) {
-  
   const IntVect box = geom.Domain().length();
-  Real phi0 = fb(0.55, pow(10, -7), 10);
-  const Real xi = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi0*phi0)));
+  
+  const Real phi0 = fb(0.55, pow(10, -7), 10);
+  const Real rho0=1.0;
+
+  bulk_free_energy curr_state(rho0, phi0);
+  const Real xi = curr_state.interface_width();
   // const Real b = -(pow(chi, 2.350)/(pow(kappa, 0.640)*pow(T, 5.559)*489.435));
   const Real intLoc = (Real(box[0]) - 1.)/2.;
   auto const & f = mf.arrays();
@@ -491,25 +492,16 @@ inline void LBM_init_flat_interface(const Geometry& geom,
       const Real rz = z-box[0]/2;
       const Real r2 = rx*rx+ry*ry+rz*rz;
   #endif
-      Real factor = 1.;
-      const Real rho=1.0;
-      r[nbx](x, y, z, 0) = 1.;
+      const Real phi_ref = phi0*tanh((Real(x) - intLoc)/(sqrt(2.)*xi));
+      r[nbx](x, y, z, 0) = rho0;
       // r[nbx](x, y, z, 1) = phi0*tanh(b*(Real(x) - intLoc));
-      Real phi_ref = -phi0*tanh((Real(x) - intLoc)/xi);
       r[nbx](x, y, z, 1) = phi_ref;
       // Print() << "intLoc:"<< intLoc << " " << Real(x) <<": " << phi0*tanh(b*(Real(x) - intLoc)) << "\n";
       // // Print() << "Initial phi: " << phi << "\n";
-      if (rx < 0.) {
-        // phi = (1. + 0.49)/2.;
-        factor = 1.;
-      } else {
-        // phi = (1. - 0.49)/2.;
-        factor = -1.;
-      }
       
       for (int i=0; i<nvel; i++) {
-        f[nbx](x,y,z,i) = w[i]*rho;
-        g[nbx](x,y,z,i) = w[i]*phi0*factor;
+        f[nbx](x,y,z,i) = w[i]*rho0;
+        g[nbx](x,y,z,i) = w[i]*phi_ref;
       }
 
     });
@@ -527,8 +519,14 @@ inline void LBM_init_droplet(const Real r,
     const IntVect box = geom.Domain().length();
     const Real R = r*box[0];
 
-    Real phi0 = fb(0.6, pow(10, -7), 1000);
-    const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+    // Real phi0 = fb(0.6, pow(10, -7), 1000);
+    // const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+
+    const Real phi0 = fb(0.55, pow(10, -7), 10);
+    const Real rho0=1.0;
+
+    bulk_free_energy curr_state(rho0, phi0);
+    const Real xi = curr_state.interface_width();
 
     auto const & f = mf.arrays();
     auto const & g = mg.arrays();
@@ -545,20 +543,144 @@ inline void LBM_init_droplet(const Real r,
   #endif
       const Real r = sqrt(r2);
 
-      const Real rho = 1.0;
-      // const Real phi0 = fb(0.6, pow(10, -7), 1000);;
-      // const Real phi = phi0*tanh((R-r)/sqrt(kappa));
-
-      const Real phi = -phi0*tanh((R-r)/xi);
-      ref[nbx](x, y, z, 0) = rho;
+      const Real phi = phi0*tanh((R-r)/xi);
+      ref[nbx](x, y, z, 0) = rho0;
       ref[nbx](x, y, z, 1) = phi;
-      // Real phi = 0.0;
-      // const Real test = tanh((R-r)/sqrt(kappa));
-      // if (test > 0){phi = (1.0 + 0.50)/2.;}
-      // else{phi = (1.0 - 0.50)/2.;}
 
       for (int i=0; i<nvel; i++) {
-        f[nbx](x,y,z,i) = w[i]*rho;
+        f[nbx](x,y,z,i) = w[i]*rho0;
+        g[nbx](x,y,z,i) = w[i]*phi;
+      }
+
+    });
+    hydrovars(mf, mg, hydrovs);
+}
+
+// binary cylinder of C1 and C2
+inline void LBM_init_cylinder_x(const Real r,
+			     const Geometry& geom,
+			     MultiFab& mf,
+			     MultiFab& mg,
+			     MultiFab& hydrovs,
+           MultiFab& ref_params) {
+    
+    const IntVect box = geom.Domain().length();
+    const Real R = r*box[2];
+
+    // Real phi0 = fb(0.6, pow(10, -7), 1000);
+    // const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+
+    const Real phi0 = fb(0.55, pow(10, -7), 10);
+    const Real rho0=1.0;
+
+    bulk_free_energy curr_state(rho0, phi0);
+    const Real xi = curr_state.interface_width();
+
+    auto const & f = mf.arrays();
+    auto const & g = mg.arrays();
+    auto const & ref = ref_params.arrays();
+    GpuArray<Real,3> dx = geom.CellSizeArray();
+    ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+      const Real rz = z-box[2]/2;
+      const Real ry = y-box[1]/2;
+      
+      const Real r2 = rz*rz + ry*ry;
+      const Real r = sqrt(r2);
+
+      const Real phi = phi0*tanh((R-r)/xi);
+      ref[nbx](x, y, z, 0) = rho0;
+      ref[nbx](x, y, z, 1) = phi;
+
+      for (int i=0; i<nvel; i++) {
+        f[nbx](x,y,z,i) = w[i]*rho0;
+        g[nbx](x,y,z,i) = w[i]*phi;
+      }
+
+    });
+    hydrovars(mf, mg, hydrovs);
+}
+
+// binary cylinder of C1 and C2
+inline void LBM_init_cylinder_y(const Real r,
+			     const Geometry& geom,
+			     MultiFab& mf,
+			     MultiFab& mg,
+			     MultiFab& hydrovs,
+           MultiFab& ref_params) {
+    
+    const IntVect box = geom.Domain().length();
+    const Real R = r*box[2];
+
+    // Real phi0 = fb(0.6, pow(10, -7), 1000);
+    // const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+
+    const Real phi0 = fb(0.55, pow(10, -7), 10);
+    const Real rho0=1.0;
+
+    bulk_free_energy curr_state(rho0, phi0);
+    const Real xi = curr_state.interface_width();
+
+    auto const & f = mf.arrays();
+    auto const & g = mg.arrays();
+    auto const & ref = ref_params.arrays();
+    GpuArray<Real,3> dx = geom.CellSizeArray();
+    ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+      const Real rz = z-box[2]/2;
+      const Real rx = x-box[0]/2;
+      
+      const Real r2 = rz*rz + rx*rx;
+      const Real r = sqrt(r2);
+
+      const Real phi = phi0*tanh((R-r)/xi);
+      ref[nbx](x, y, z, 0) = rho0;
+      ref[nbx](x, y, z, 1) = phi;
+
+      for (int i=0; i<nvel; i++) {
+        f[nbx](x,y,z,i) = w[i]*rho0;
+        g[nbx](x,y,z,i) = w[i]*phi;
+      }
+
+    });
+    hydrovars(mf, mg, hydrovs);
+}
+
+// binary cylinder of C1 and C2
+inline void LBM_init_cylinder_z(const Real r,
+			     const Geometry& geom,
+			     MultiFab& mf,
+			     MultiFab& mg,
+			     MultiFab& hydrovs,
+           MultiFab& ref_params) {
+    
+    const IntVect box = geom.Domain().length();
+    const Real R = r*box[2];
+
+    // Real phi0 = fb(0.6, pow(10, -7), 1000);
+    // const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
+
+    const Real phi0 = fb(0.55, pow(10, -7), 10);
+    const Real rho0=1.0;
+
+    bulk_free_energy curr_state(rho0, phi0);
+    const Real xi = curr_state.interface_width();
+
+    auto const & f = mf.arrays();
+    auto const & g = mg.arrays();
+    auto const & ref = ref_params.arrays();
+    GpuArray<Real,3> dx = geom.CellSizeArray();
+    ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+      const Real ry = y-box[1]/2;
+      const Real rx = x-box[0]/2;
+      
+      const Real r2 = ry*ry + rx*rx;
+      const Real r = sqrt(r2);
+
+      const Real phi = phi0*tanh((R-r)/xi);
+      ref[nbx](x, y, z, 0) = rho0;
+      ref[nbx](x, y, z, 1) = phi;
+
+      for (int i=0; i<nvel; i++) {
+        f[nbx](x,y,z,i) = w[i]*rho0;
         g[nbx](x,y,z,i) = w[i]*phi;
       }
 

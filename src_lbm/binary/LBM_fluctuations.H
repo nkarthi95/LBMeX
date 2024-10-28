@@ -323,7 +323,7 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
 inline void generate_kspace_noise(const Geometry& geom,
 				  MultiFab& kspace_noise_real,
 				  MultiFab& kspace_noise_imag,
-          MultiFab& ref_params) {
+          MultiFab& hydrovs) {
   BL_PROFILE_VAR("generate_kspace_noise()",generate_kspace_noise);
   
   const Box domain = geom.Domain();
@@ -333,49 +333,52 @@ inline void generate_kspace_noise(const Geometry& geom,
   // Box domain2(IntVect{0,0,0}, IntVect{domain.length(0), domain.length(1), domain.length(2)});
   // Print() << "x:" << domain.length(0) << " y:" << domain.length(1) << " z:" << domain.length(2) << "\n";
 
-  // // FFT //
-  // MultiFab fft_real(ba, dm, nvar, nghost);
-  // MultiFab fft_imag(ba, dm, nvar, nghost);  
-  // compute_fft(geom, ref_params, fft_real, fft_imag, nvar, true); //output is correct. Normalization is 1/boxVol
-  // WriteOutput(0, fft_real, geom, "FFT_plt_real", nvar, 0);
-  // WriteOutput(0, fft_imag, geom, "FFT_plt_imag", nvar, 0);
-  // // FFT //
+  #if 0
+  // FFT //
+  MultiFab ref_params(ba, dm, nvar, nghost); ref_params.ParallelCopy(hydrovs, 0, 0, 2);
+  MultiFab fft_real(ba, dm, nvar, nghost);
+  MultiFab fft_imag(ba, dm, nvar, nghost);  
+  compute_fft(geom, ref_params, fft_real, fft_imag, nvar, true); //output is correct. Normalization is 1/boxVol
+  WriteOutput(0, fft_real, geom, "FFT_plt_real", nvar, 0);
+  WriteOutput(0, fft_imag, geom, "FFT_plt_imag", nvar, 0);
+  // FFT //
   
-  // // convolution //
-  // std::string mode = "same";
-  // // std::string mode = "full";
-  // MultiFab kernel(ba, dm, nvar, nghost); kernel.setVal(1.);
-  // MultiFab kref(ba, dm, nvar, nghost); kref.setVal(0.);
-  // MultiFab kref_imag(ba, dm, nvar, nghost); kref_imag.setVal(0.);
-  // MultiFab conv_real(ba, dm, nvar, nghost); conv_real.setVal(0.);
-  // MultiFab conv_imag(ba, dm, nvar, nghost); conv_imag.setVal(0.);
-  // convolve_3D(fft_real, kernel, conv_real, mode, nvar);
-  // convolve_3D(fft_imag, kernel, conv_imag, mode, nvar);
+  // convolution //
+  std::string mode = "same";
+  // std::string mode = "full";
+  MultiFab kernel(ba, dm, nvar, nghost); kernel.setVal(1.);
+  MultiFab kref(ba, dm, nvar, nghost); kref.setVal(0.);
+  MultiFab kref_imag(ba, dm, nvar, nghost); kref_imag.setVal(0.);
+  MultiFab conv_real(ba, dm, nvar, nghost); conv_real.setVal(0.);
+  MultiFab conv_imag(ba, dm, nvar, nghost); conv_imag.setVal(0.);
+  convolve_3D(fft_real, kernel, conv_real, mode, nvar);
+  convolve_3D(fft_imag, kernel, conv_imag, mode, nvar);
 
-  // // convolve_3D(fft_real, kernel, conv_real, mode, 0);
-  // // convolve_3D(fft_imag, kernel, conv_imag, mode, 0);
-  // // convolve_3D(fft_real, kernel, conv_real, mode, 1);
-  // // convolve_3D(fft_imag, kernel, conv_imag, mode, 1);
+  // convolve_3D(fft_real, kernel, conv_real, mode, 0);
+  // convolve_3D(fft_imag, kernel, conv_imag, mode, 0);
+  // convolve_3D(fft_real, kernel, conv_real, mode, 1);
+  // convolve_3D(fft_imag, kernel, conv_imag, mode, 1);
 
-  // WriteOutput(0, conv_real, geom, "conv_plt_real_", nvar, 0);
-  // WriteOutput(0, conv_imag, geom, "conv_plt_imag_", nvar, 0);
-  // // convolution //
+  WriteOutput(0, conv_real, geom, "conv_plt_real_", nvar, 0);
+  WriteOutput(0, conv_imag, geom, "conv_plt_imag_", nvar, 0);
+  // convolution //
 
-  // // conjugate multiplication //
-  // MultiFab::Copy(kref, conv_real, 0, 0, nvar, nghost); //copy works fine
-  // MultiFab::Copy(kref_imag, conv_imag, 0, 0, nvar, nghost); //copy works fine
-  // MultiFab::Multiply(kref, conv_real, 0, 0, nvar, nghost); //squaring. Checked to work
-  // MultiFab::Multiply(kref_imag, conv_imag, 0, 0, nvar, nghost); // squaring. Checked to work
-  // MultiFab::Subtract(kref, kref_imag, 0, 0, nvar, nghost); // multiplying convolution by its conjugate for reference state which acts as (a + b)*(a - b). Works
-  // // conjugate multiplication //
-  
+  // conjugate multiplication //
+  MultiFab::Copy(kref, conv_real, 0, 0, nvar, nghost); //copy works fine
+  MultiFab::Copy(kref_imag, conv_imag, 0, 0, nvar, nghost); //copy works fine
+  MultiFab::Multiply(kref, conv_real, 0, 0, nvar, nghost); //squaring. Checked to work
+  MultiFab::Multiply(kref_imag, conv_imag, 0, 0, nvar, nghost); // squaring. Checked to work
+  MultiFab::Subtract(kref, kref_imag, 0, 0, nvar, nghost); // multiplying convolution by its conjugate for reference state which acts as (a + b)*(a - b). Works
+  // conjugate multiplication //
+  #endif
+
   // generate noise in whole box because of grid decomposition
   // (generating noise without grid decomposition may be faster)
   for (MFIter mfi(kspace_noise_real); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
     const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
     const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
-    const Array4<Real>& r = ref_params.array(mfi);
+    const Array4<Real>& r = hydrovs.array(mfi);
     // const Array4<Real>& kr = kref.array(mfi);
 
     // construct noise in k-space
@@ -423,7 +426,7 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
     C.fill(0.);
     for (int i = ncons; i < ndof; i++){
       for (int j = ncons; j < i+1; j++){
-        C[i*ndof+j] = SLC_C[(j-ncons)*lda+(i-ncons)];
+        C[i*ndof+j] = SLC_C[(j-ncons)*lda+(i-ncons)]; //row and columns are inverted as output of dpotrf is in fortran column major not row major like C
       }
     }
     // // LAPACK CHOLESKY DECOMP. COMMENT OUT IF THIS DOESN'T WORK
@@ -494,7 +497,8 @@ inline void generate_fluctuations(const Geometry& geom,
     
     // generate noise in k-space
     // Print() << "Correlated noise\n";
-    generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
+    // generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, ref_params);
+    generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag, hydrovs);
     // note that the k-space noise is generated without the required symmetries
     // (this is to allow for parallel generation of noise)
     // the k-space symmetries are handled when copying in compute_ifft

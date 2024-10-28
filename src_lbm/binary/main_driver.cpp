@@ -117,6 +117,15 @@ void main_driver(const char* argv) {
     case 2:
       LBM_init_droplet(R, geom, fold, gold, hydrovs, ref_params);
       break;
+    case 30:
+      LBM_init_cylinder_x(R, geom, fold, gold, hydrovs, ref_params);
+      break;
+    case 31:
+      LBM_init_cylinder_y(R, geom, fold, gold, hydrovs, ref_params);
+      break;
+    case 32:
+      LBM_init_cylinder_z(R, geom, fold, gold, hydrovs, ref_params);
+      break;
     case 10:
       checkpointRestart(start_step, mf_checkpoint, hydro_chk, fold, gold, ba, dm);--start_step;
       hydrovs.ParallelCopy(mf_checkpoint, 0, 0, 2*nvel);

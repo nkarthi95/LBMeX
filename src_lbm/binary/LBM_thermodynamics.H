@@ -12,11 +12,17 @@ struct bulk_free_energy {
     Real phi;  // order_parameter
 
     // Overloaded constructor without k
-    bulk_free_energy(double density, double order_parameter)
+    bulk_free_energy(Real density, Real order_parameter)
         : rho(density), phi(order_parameter) {}
 
     // Default constructor
     bulk_free_energy() : rho(1.), phi(0.) {}
+
+    Real interface_width(){
+      // const Real out = chi/4.*rho*(1. - pow(phi/rho, 2)) - rho*T + T*C1*log(C1) + T*C2*log(C2);
+      const Real out = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi*phi)));
+      return out;
+    }
 
     Real calculate_f(){
       const Real C1 = (rho + phi)/2;
