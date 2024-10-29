@@ -454,8 +454,8 @@ inline void generate_realspace_noise(const Geometry& geom, MultiFab& hydrovs, Mu
     const Array4<Real>& xi = noise.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      // const Real rho0 = h(x,y,z,0);
-      const Real rho0 = 1.;
+      const Real rho0 = h(x,y,z,0);
+      // const Real rho0 = 1.;
       const Real phi0 = h(x,y,z,1);
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
