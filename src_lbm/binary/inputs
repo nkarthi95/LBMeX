@@ -4,12 +4,12 @@ ny = 2
 nz = 512
 max_grid_size_x = 64
 max_grid_size_y = 2
-max_grid_size_z = 128
+max_grid_size_z = 64
 init_cond = 1
 #R = 0.3
 
 # time parameters
-nsteps = 1
+nsteps = 20000
 n_sci_start = 15000
 dump_hydro = 1
 n_hydro = 50
@@ -20,8 +20,8 @@ start_step = 0
 output_hdf5 = 1
 
 # model parameters
-lambda = 0.6
-T = 0.25
+lambda = 0.5
+T = 0.2
 kappa = 0.03
 gamma = 1.0
 

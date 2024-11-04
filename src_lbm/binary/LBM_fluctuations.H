@@ -82,13 +82,36 @@ void conv_3d_full(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, int NV
   }
 }
 
-
+#if 0
 void conv_3d_same(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, int NVAR){
 
+  //only works if its periodic, 1 grid(1 core) and kernel is the same size as the input
+
   const int row = nx; const int col = ny; const int dep = nz;
-  const int krow = nx; const int kcol = ny; const int kdep = nz;
-  const int orow = row; const int ocol = col; const int odep = dep;
-  const int kcenterx = krow/2; const int kcentery = kcol/2; const int kcenterz = kdep/2;
+  const int krow = nx; const int kcol = ny; const int kdep = nz; // needs to change to indicate dimensions of response kernel
+  const int orow = row; const int ocol = col; const int odep = dep; //same size as input
+  const int kcenterx = krow/2; const int kcentery = kcol/2; const int kcenterz = kdep/2; // maybe subtracting by 1 may be better for all values when dimensions are even
+
+  // wraparound may be the issue
+  for (MFIter mfi(in_mf); mfi.isValid(); ++mfi){
+    const Array4<Real>& in = in_mf.array(mfi);
+    const Array4<Real>& kernel = kernel_mf.array(mfi);
+    const Array4<Real>& out = out_mf.array(mfi);
+
+    const Box& bx = mfi.tilebox();
+    ParallelFor(bx, NVAR, [=] AMREX_GPU_DEVICE(int i, int j, int k, int comp) {
+        for(int l = 0; l < krow; l++){
+          for(int m = 0; m < kcol; m++){
+            for(int n = 0; n < kdep; n++){
+              const int ri = (i + (l - kcenterx) + nx)%nx;
+              const int ri = (i + (l - kcenterx) + ny)%ny;
+              const int ri = (i + (l - kcenterx) + nx)%nz;
+              out(i,j,k,comp) += in(rj,rj,rk,comp)*kernel(m,n,l,comp);
+            }
+          }
+        }
+    });
+  }
 
   // auto const & in = in_mf.arrays();
   // auto const & kernel = kernel_mf.arrays();
@@ -109,32 +132,37 @@ void conv_3d_same(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, int NV
   //   });
   // }
 
-  for(int comp = 0; comp < NVAR; comp++){
-    for (MFIter mfi(in_mf); mfi.isValid(); ++mfi){
-      const Array4<Real>& in = in_mf.array(mfi);
-      const Array4<Real>& kernel = kernel_mf.array(mfi);
-      const Array4<Real>& out = out_mf.array(mfi);
-      for(int i = 0; i < orow; i++){
-        for(int j = 0; j < ocol; j++){
-          for(int k = 0; k < odep; k++){
-            for(int m = 0; m < krow; m++){
-              for(int n = 0; n < kcol; n++){
-                for(int l = 0; l < kdep; l++){
-                  const int ri = i + (m - kcenterx); const int rj = j + (n - kcentery); const int rk = k + (l - kcenterz);
-                  if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 && rk < dep){
-                    out(i,j,k,comp) += in(rj,rj,rk,comp)*kernel(m,n,l,comp);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+
+
+  // for(int comp = 0; comp < NVAR; comp++){
+  //   for (MFIter mfi(in_mf); mfi.isValid(); ++mfi){
+  //     const Array4<Real>& in = in_mf.array(mfi);
+  //     const Array4<Real>& kernel = kernel_mf.array(mfi);
+  //     const Array4<Real>& out = out_mf.array(mfi);
+  //     for(int i = 0; i < orow; i++){
+  //       for(int j = 0; j < ocol; j++){
+  //         for(int k = 0; k < odep; k++){
+  //           for(int m = 0; m < krow; m++){
+  //             for(int n = 0; n < kcol; n++){
+  //               for(int l = 0; l < kdep; l++){
+  //                 const int ri = i + (m - kcenterx); const int rj = j + (n - kcentery); const int rk = k + (l - kcenterz);
+  //                 const ri = ri%orow; //ensures that the index doesn't go out of bounds 
+  //                 // output should match the input mf size
+  //                 // allows for arbitrary kernel dimension up to and including up to input size
+  //                 if (ri >= 0 && ri < row && rj >= 0 && rj < col && rk >= 0 && rk < dep){
+  //                   out(i,j,k,comp) += in(ri,rj,rk,comp)*kernel(m,n,l,comp);
+  //                 }
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 }
 
-#if 0
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void conv_3d_same(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, int NVAR){
   const int row = 32; const int col = 32; const int dep = 32;
@@ -192,6 +220,38 @@ void conv_3d_same(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, int NV
   });
 }
 #endif
+
+void conv_3d_same(MultiFab& in_mf, MultiFab& kernel_mf, 
+                  MultiFab& out_mf, int NVAR){
+
+   const int row = nx; const int col = ny; const int dep = nz;
+   const int krow = nx; const int kcol = ny; const int kdep = nz;  //this line needs to change to indicate dimensions of response kernel
+   const int orow = nx; const int ocol = ny; const int odep = nz; // forperiodic, orow must be the same as row
+   const int kcenterx = krow/2; const int kcentery = kcol/2; const int kcenterz = kdep/2; // might consider krow/2-1, etc. if krow, kcol, and kdep are even
+
+   out_mf.setVal(0.);
+
+   for (MFIter mfi(in_mf); mfi.isValid(); ++mfi){
+      const Array4<Real>& in = in_mf.array(mfi);
+      const Array4<Real>& kernel = kernel_mf.array(mfi);
+      const Array4<Real>& out = out_mf.array(mfi);
+
+      const Box& bx = mfi.tilebox();
+
+      ParallelFor(bx, NVAR, [=] AMREX_GPU_DEVICE(int i, int j, int k, int comp) { 
+        for(int l = 0; l < krow; l++){
+          for(int m = 0; m < kcol; m++){
+            for(int n = 0; n < kdep; n++){
+              const int ri = (i + (l - kcenterx) + nx)%nx;
+              const int rj = (j + (m - kcentery) + ny)%ny;
+              const int rk = (k + (n - kcenterz) + nz)%nz;
+              out(i,j,k,comp) += in(ri,rj,rk,comp)*kernel(m,n,l,comp);
+            }
+          } 
+        }
+      });
+    }
+}
 
 void convolve_3D(MultiFab& in_mf, MultiFab& kernel_mf, MultiFab& out_mf, 
                  std::string mode, int NVAR){
@@ -333,7 +393,7 @@ inline void generate_kspace_noise(const Geometry& geom,
   // Box domain2(IntVect{0,0,0}, IntVect{domain.length(0), domain.length(1), domain.length(2)});
   // Print() << "x:" << domain.length(0) << " y:" << domain.length(1) << " z:" << domain.length(2) << "\n";
 
-  #if 0
+  #if 1
   // FFT //
   MultiFab ref_params(ba, dm, nvar, nghost); ref_params.ParallelCopy(hydrovs, 0, 0, 2);
   MultiFab fft_real(ba, dm, nvar, nghost);
@@ -402,8 +462,9 @@ inline void generate_kspace_noise(const Geometry& geom,
 // compute spatially uncorrelated noise vector from Gaussian random variables
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const RandomEngine& engine) {
-  GpuArray<Real,ndof> r, xi;
+  GpuArray<Real,ndof> r, xi; 
   GpuArray<Real,ndof*ndof> C;
+  r.fill(0.); xi.fill(0.); C.fill(0.);
 
   // Cholesky decomposition of noise covariance matrix
   C = noise_covariance(rho0,phi0,0);
@@ -439,7 +500,7 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
 
   // compute noise vector from Gaussian random variables
   for (int i=0; i<ndof; ++i) {
-    xi[i] = 0;
+    // xi[i] = 0;
     for (int j=0; j<=i; ++j) {
       xi[i] += C[i*ndof+j]*r[j];
     }
@@ -454,8 +515,8 @@ inline void generate_realspace_noise(const Geometry& geom, MultiFab& hydrovs, Mu
     const Array4<Real>& xi = noise.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      const Real rho0 = h(x,y,z,0);
-      // const Real rho0 = 1.;
+      // const Real rho0 = h(x,y,z,0);
+      const Real rho0 = 1.;
       const Real phi0 = h(x,y,z,1);
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
