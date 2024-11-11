@@ -393,7 +393,7 @@ inline void generate_kspace_noise(const Geometry& geom,
   // Box domain2(IntVect{0,0,0}, IntVect{domain.length(0), domain.length(1), domain.length(2)});
   // Print() << "x:" << domain.length(0) << " y:" << domain.length(1) << " z:" << domain.length(2) << "\n";
 
-  #if 1
+  #if 0
   // FFT //
   MultiFab ref_params(ba, dm, nvar, nghost); ref_params.ParallelCopy(hydrovs, 0, 0, 2);
   MultiFab fft_real(ba, dm, nvar, nghost);
