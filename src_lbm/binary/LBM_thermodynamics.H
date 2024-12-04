@@ -20,7 +20,8 @@ struct bulk_free_energy {
 
     Real interface_width(){
       // const Real out = chi/4.*rho*(1. - pow(phi/rho, 2)) - rho*T + T*C1*log(C1) + T*C2*log(C2);
-      const Real out = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi*phi)));
+      // const Real out = sqrt((0.142*kappa)/((chi/2 - T) - 0.31*T*(phi*phi)));
+      const Real out = sqrt(kappa/(chi/2 - T));
       return out;
     }
 

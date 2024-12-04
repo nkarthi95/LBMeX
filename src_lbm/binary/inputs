@@ -1,9 +1,9 @@
 # box parameters
-nx = 64
-ny = 2
-nz = 512
-max_grid_size_x = 64
-max_grid_size_y = 2
+nx = 32
+ny = 4
+nz = 256
+max_grid_size_x = 32
+max_grid_size_y = 4
 max_grid_size_z = 64
 init_cond = 1
 #R = 0.3

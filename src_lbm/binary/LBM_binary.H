@@ -472,8 +472,9 @@ inline void LBM_init_flat_interface(const Geometry& geom,
             MultiFab& ref_params) {
   const IntVect box = geom.Domain().length();
   
-  const Real phi0 = fb(0.55, pow(10, -7), 10);
-  const Real rho0=1.0;
+  // const Real phi0 = fb(0.55, pow(10, -7), 10);
+  const Real phi0 = sqrt(3*(chi/2 - T)/(chi/2));
+  const Real rho0 = 1.0;
 
   bulk_free_energy curr_state(rho0, phi0);
   const Real xi = curr_state.interface_width();
@@ -522,8 +523,9 @@ inline void LBM_init_droplet(const Real r,
     // Real phi0 = fb(0.6, pow(10, -7), 1000);
     // const Real xi = sqrt((0.142*kappa)/((chi - T/2) - 0.31*T*(phi0*phi0)));
 
-    const Real phi0 = fb(0.55, pow(10, -7), 10);
-    const Real rho0=1.0;
+    // const Real phi0 = fb(0.55, pow(10, -7), 10);
+    const Real phi0 = sqrt(3*(chi/2 - T)/(chi/2));
+    const Real rho0 = 1.0;
 
     bulk_free_energy curr_state(rho0, phi0);
     const Real xi = curr_state.interface_width();

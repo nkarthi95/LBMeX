@@ -462,6 +462,7 @@ inline void generate_kspace_noise(const Geometry& geom,
 // compute spatially uncorrelated noise vector from Gaussian random variables
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const RandomEngine& engine) {
+  BL_PROFILE_VAR("uncorrelated_noise()",uncorrelated_noise);
   GpuArray<Real,ndof> r, xi; 
   GpuArray<Real,ndof*ndof> C;
   r.fill(0.); xi.fill(0.); C.fill(0.);
@@ -510,6 +511,7 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
 
 // generate real-space noise for all non-conserved moments
 inline void generate_realspace_noise(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
+  BL_PROFILE_VAR("generate_realspace_noise()",generate_realspace_noise);
   for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
     const Array4<Real>& xi = noise.array(mfi);
