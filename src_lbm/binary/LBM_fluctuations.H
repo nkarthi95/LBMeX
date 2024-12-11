@@ -2,10 +2,12 @@
 #define LBM_FLUCTUATIONS_H_
 
 #ifdef AMREX_USE_CUDA
+#include <culapacke.h> // this does not work yet. GPU support not implemented
 #include <cufft.h>
 #else
 #include <fftw3.h>
 #include <fftw3-mpi.h>
+#include <lapacke.h>
 #endif
 
 #include <lapacke.h>

@@ -10,6 +10,7 @@ using namespace amrex;
 #include "tests.H"
 #include "LBM_IO.H"
 #include "LBM_thermodynamics.H"
+#include "LBM_analysis.H"
 
 void main_driver(const char* argv) {
   // test_case_fft();
@@ -150,6 +151,22 @@ void main_driver(const char* argv) {
   // TIMESTEP
   for (int step=start_step; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, ref_params);
+    // Real R = droplet_radius(hydrovs, 1);
+    // // Print() << "Droplet Radius: " << R << "\n";
+    // GpuArray<Real, 3> com = center_of_mass(hydrovs, 1);
+    // // Print() << "COM [x, y, z]: " << "[" << com[0] << ", " << com[1] << ", " << com[2] << "]\n";
+    // GpuArray<Real, 9> S = gyration_tensor(com, hydrovs, 1);
+    // for (int i = 0; i < 3; i++){
+    //   Print() << "[";
+    //   for (int j = 0; j < 3; j++){
+    //     Print() << S[i*3 + j] << " ";
+    //   }
+    //   Print() << "]\n";
+    // }
+
+    GpuArray<Real, 3> dr = axial_radii(hydrovs, 1);
+    Print() << "dr [dx, dy, dz]: " << "[" << dr[0] << ", " << dr[1] << ", " << dr[2] << "]\n";
+
 
     if (step >= n_sci_start){
 

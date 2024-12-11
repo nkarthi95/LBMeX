@@ -1,17 +1,17 @@
 # box parameters
 nx = 32
-ny = 4
-nz = 256
+ny = 32
+nz = 32
 max_grid_size_x = 32
-max_grid_size_y = 4
-max_grid_size_z = 64
-init_cond = 1
-#R = 0.3
+max_grid_size_y = 32
+max_grid_size_z = 32
+init_cond = 2
+R = 0.3
 
 # time parameters
-nsteps = 20000
+nsteps = 10
 n_sci_start = 15000
-dump_hydro = 1
+dump_hydro = 0
 n_hydro = 50
 dump_SF = 0
 n_SF = 1000
