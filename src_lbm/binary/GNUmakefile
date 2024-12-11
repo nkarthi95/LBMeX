@@ -42,6 +42,8 @@ ifeq ($(USE_CUDA),TRUE)
 else
   LIBRARIES += $(shell pkg-config --libs fftw3)
   #LIBRARIES += $(shell pkg-config --libs blas)
-  LIBRARIES += $(shell pkg-config --libs lapack)
-  LIBRARIES += $(shell pkg-config --libs lapacke)
+  #LIBRARIES += $(shell pkg-config --libs lapack)
+  #LIBRARIES += $(shell pkg-config --libs lapacke)
+  #LIBRARIES += $(shell pkg-config --libs lapack-atlas blas-atlas)
+  LIBRARIES += $(shell pkg-config --libs lapack-atlas)
 endif

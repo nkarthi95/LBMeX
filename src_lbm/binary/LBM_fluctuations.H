@@ -7,10 +7,10 @@
 #else
 #include <fftw3.h>
 #include <fftw3-mpi.h>
-#include <lapacke.h>
+#include <lapack.h>
 #endif
 
-#include <lapacke.h>
+// #include <lapacke.h>
 #include <AMReX_GpuComplex.H>
 #include <math.h>
 #include <vector>

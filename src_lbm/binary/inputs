@@ -9,10 +9,10 @@ init_cond = 2
 R = 0.3
 
 # time parameters
-nsteps = 10
-n_sci_start = 15000
+nsteps = 2
+n_sci_start = 0
 dump_hydro = 0
-n_hydro = 50
+n_hydro = 0
 dump_SF = 0
 n_SF = 1000
 n_checkpoint = 10000
