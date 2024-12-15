@@ -45,8 +45,9 @@ void main_driver(const char* argv) {
   int output_hdf = 0;
 
   // run output
-  int record_start = 300000;
-  int record_interval = 1;
+  int record_start = 550000;
+  int record_interval = 10;
+  int binarize = 1;
 
   // input parameters
   ParmParse pp;
@@ -155,28 +156,46 @@ void main_driver(const char* argv) {
   Print() << "LB initialized\n";
   start_step++;
 
+  MultiFab droplet(ba, dm, 1, 0);
   std::ofstream outfile("example.csv");
-  outfile << "Timestep,Radius,dx,dy,dz" << std::endl;
+  outfile << "Timestep,Radius,cx,cy,cz,dx,dy,dz" << std::endl;
+  if (binarize == 1){droplet = binarize_droplet(hydrovs, 1, 0.);} else{droplet.ParallelCopy(hydrovs, 1, 0, 1);}
+  Real R = droplet_radius(droplet); // AMReX implementation assumes binarized droplet as input.
+  GpuArray<Real, 3> com = center_of_mass(droplet);
+  GpuArray<Real, 3> dr = axial_radii(droplet);
+  outfile << start_step-1 << "," << R << "," << com[0] << "," << com[1] << "," << com[2] << "," << dr[0] << "," << dr[1] << "," << dr[2] << std::endl; //"Timestep, Radius, dx, dy, dz\n" 
   // myfile.open("example.txt");
 
   // TIMESTEP
   for (int step=start_step; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, ref_params);
-    Real R = droplet_radius(hydrovs, 1);
+    
+    // droplet.ParallelCopy(hydrovars, comp, 0, 1);
+    // droplet = binarize_droplet(hydrovs, 1, 0.);
+    // Real R = droplet_radius(droplet); // AMReX implementation assumes binarized droplet as input.
+    // GpuArray<Real, 3> dr = axial_radii(droplet);
+    // // testing //
     // Print() << "Droplet Radius: " << R << "\n";
-    // GpuArray<Real, 3> com = center_of_mass(hydrovs, 1);
+    // GpuArray<Real, 3> com = center_of_mass(droplet);
     // Print() << "COM [x, y, z]: " << "[" << com[0] << ", " << com[1] << ", " << com[2] << "]\n";
-    // GpuArray<Real, 9> S = gyration_tensor(com, hydrovs, 1);
+    // GpuArray<Real, 9> S = gyration_tensor(com, droplet);
     // for (int i = 0; i < 3; i++){
     //   for (int j = 0; j < 3; j++){
     //     Print() <<"idx: " << i*3 + j << " " << S[i*3 + j] << "\n";
     //   }
     //   // Print() << "]\n";
     // }
-    GpuArray<Real, 3> dr = axial_radii(hydrovs, 1);
     // Print() << "dr [dx, dy, dz]: " << "[" << dr[0] << ", " << dr[1] << ", " << dr[2] << "]\n";
+    // // testing //
+
     if (step >= record_start and step%record_interval == 0){
-      outfile << step << "," << R << "," << dr[0] << "," << dr[1] << "," << dr[2] << std::endl; //"Timestep, Radius, dx, dy, dz\n" 
+      // droplet.ParallelCopy(hydrovs, 1, 0, 1);
+      // droplet = binarize_droplet(hydrovs, 1, 0.);
+      if (binarize == 1){droplet = binarize_droplet(hydrovs, 1, 0.);} else{droplet.ParallelCopy(hydrovs, 1, 0, 1);}
+      Real R = droplet_radius(droplet); // AMReX implementation assumes binarized droplet as input.
+      GpuArray<Real, 3> com = center_of_mass(droplet);
+      GpuArray<Real, 3> dr = axial_radii(droplet);
+      outfile << step << "," << R << "," << com[0] << "," << com[1] << "," << com[2] << "," << dr[0] << "," << dr[1] << "," << dr[2] << std::endl; //"Timestep, Radius, dx, dy, dz\n" 
     }
 
     if (step >= n_sci_start){

@@ -11,10 +11,26 @@
 #endif
 
 #include <AMReX_Array.H>
+#include <AMReX_Dim3.H>
+#include <AMReX_FabArrayUtility.H>
 
 #include "LBM_IO.H"
 #include <math.h>
 
+
+MultiFab binarize_droplet(MultiFab& hydrovars, int comp = 1, Real cutoff = 0.){
+    BoxArray ba = hydrovars.boxArray();
+    DistributionMapping dm = hydrovars.DistributionMap();
+    MultiFab droplet(ba, dm, 1, 0);
+    
+    droplet.ParallelCopy(hydrovars, comp, 0, 1);
+    auto const & d = droplet.arrays();
+    ParallelFor(droplet, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+        if (d[nbx](x, y, z, 0) <= cutoff){
+            d[nbx](x, y, z, 0) = 0;}
+    });
+    return droplet;
+}
 
 // def droplet_radius_mass(density, Vp = 0, np_sphere = 0, rho_sphere = 1):
 //     nx, ny, nz = density.shape
@@ -30,45 +46,33 @@
 //         mass = droplet_mass(density - rho_m) + 0.5*Vp*np_sphere*rho_sphere
 //         R = (3./4./np.pi*mass/(rho_d-rho_m))**(1./3.)
 //         return R
-Real droplet_radius(MultiFab& hydrovars, int comp = 1){
-    Real R = 0; Real rhod = 0; Real rhom = 0; Real mass = 0;
+Real droplet_radius(MultiFab& droplet){
+    IntVect slc_lo, slc_hi;
+    Real R = 0.; Real mass = 0.;
+    Real rhod = 0.; Real rhom = 0.;
 
-  for (MFIter mfi(hydrovars); mfi.isValid(); ++mfi) {
-    const Array4<Real>& h = hydrovars.array(mfi);
-    // averaging a cubic box of size 3, centered around the center of the simulation domain for rhod
-    for (int i = -1; i <= 1; i++){
-        for (int j = -1; j <= 1; j++){
-            for (int k = -1; k <= 1; k++){
-                rhod += h(nx/2 + i, ny/2 + j, nz/2 + k, comp);
-            }
-        }
-    }
-    // rhod += h(nx/2, ny/2, nz/2, comp);
-    // averaging a corner points, for rhom
-    rhom += h(0, 0, 0, comp); 
-    rhom += h(nx - 1, 0, 0, comp); 
-    rhom += h(0, ny - 1, 0, comp); 
-    rhom += h(0, 0, nz - 1, comp);
-    rhom += h(nx - 1, ny - 1, 0, comp); 
-    rhom += h(0, ny - 1, nz - 1, comp); 
-    rhom += h(nx - 1, 0, nz - 1, comp);
-    rhom += h(nx - 1, ny - 1, nz - 1, comp);
-  }
-    rhod /= 27;
-    rhom /= 8;
-    
-    // Print() << "rhod:" << rhod << "\n";
-    // Print() << "rhom:" << rhom << "\n";
+    slc_lo = {nx/2-1, ny/2-1, nz/2-1}; slc_hi = {nx/2+1, ny/2+1, nz/2+1};
+    Box slice1(slc_lo, slc_hi);
+    rhod = droplet.sum(slice1, 0);
+    rhod /= 27.;
 
-    BoxArray ba = hydrovars.boxArray();
-    DistributionMapping dm = hydrovars.DistributionMap();
-    MultiFab mass_onegrid(ba, dm, 1, 0); // ghost cells of hydrovars is 2
-    mass_onegrid.ParallelCopy(hydrovars, comp, 0, 1);
+    slc_lo = {-1,-1,-1}; slc_hi = {1,1,1};
+    Box slice2(slc_lo, slc_hi);
+    rhom = droplet.sum(slice2, 0);
+    rhom /= 8.;
+
+    // Print() << "rhod: " << rhod << "\n";
+    // Print() << "rhom: " << rhom << "\n";
+
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
+    MultiFab mass_onegrid(ba, dm, 1, 0); // ghost cells is 0
+    mass_onegrid.ParallelCopy(droplet, 0, 0, 1);
 
     mass_onegrid.plus(-rhom, 0);
     mass = mass_onegrid.sum(0);
 
-    R = pow((3.*mass)/(4.*M_PI*(rhod - rhom)), 1./3.);
+    R = pow((3.*mass)/(4.*M_PI*(Real(rhod) - Real(rhom))), 1./3.);
     return R;
 }
 
@@ -83,9 +87,9 @@ Real droplet_radius(MultiFab& hydrovars, int comp = 1){
 //                 idxs_test[2, x, y, z] = z
     
 //     return idxs_test
-MultiFab get_indices(MultiFab& hydrovars){
-    BoxArray ba = hydrovars.boxArray();
-    DistributionMapping dm = hydrovars.DistributionMap();
+MultiFab get_indices(MultiFab& droplet){
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
     MultiFab indices(ba, dm, 3, 0);
 
     auto const & f = indices.arrays();
@@ -106,20 +110,20 @@ MultiFab get_indices(MultiFab& hydrovars){
 //         field1 = idxs[0]
 //         com[i] = np.sum(field1*OutArray)/total_mass
 //     return com
-GpuArray<Real,3> center_of_mass(MultiFab& hydrovars, int comp = 1){
+GpuArray<Real,3> center_of_mass(MultiFab& droplet){
     GpuArray<Real,3> com;
-    Real total_mass = hydrovars.sum(comp);
+    Real total_mass = droplet.sum(0);
 
     MultiFab indices;
-    indices = get_indices(hydrovars);
+    indices = get_indices(droplet);
 
-    BoxArray ba = hydrovars.boxArray();
-    DistributionMapping dm = hydrovars.DistributionMap();
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
     MultiFab com_onegrid(ba, dm, 1, 0); // ghost cells of hydrovars is 2
 
     for (int i = 0; i < 3; i++){
         com_onegrid.ParallelCopy(indices, i, 0, 1);
-        com_onegrid.Multiply(com_onegrid, hydrovars, comp, 0, 1, 0);
+        com_onegrid.Multiply(com_onegrid, droplet, 0, 0, 1, 0);
         com[i] = com_onegrid.sum(0)/total_mass;
     }
     return com;
@@ -143,16 +147,16 @@ GpuArray<Real,3> center_of_mass(MultiFab& hydrovars, int comp = 1){
 
 //             S[i*3+j] = curr_gyr.sum()
 //     return S
-GpuArray<Real,9> gyration_tensor(GpuArray<Real,3> com, MultiFab& hydrovars, int comp = 1){
+GpuArray<Real,9> gyration_tensor(GpuArray<Real,3> com, MultiFab& droplet){
     // Array1D<Real,0,9> S;
     GpuArray<Real, 9> S;
-    Real total_mass = hydrovars.sum(comp);
+    Real total_mass = droplet.sum(0);
 
     MultiFab indices;
-    indices = get_indices(hydrovars);
+    indices = get_indices(droplet);
 
-    BoxArray ba = hydrovars.boxArray();
-    DistributionMapping dm = hydrovars.DistributionMap();
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
     MultiFab com_onegrid_i(ba, dm, 1, 0); // ghost cells of hydrovars is 2
     MultiFab com_onegrid_j(ba, dm, 1, 0); // ghost cells of hydrovars is 2
     MultiFab product(ba, dm, 1, 0); // ghost cells of hydrovars is 2
@@ -173,21 +177,21 @@ GpuArray<Real,9> gyration_tensor(GpuArray<Real,3> com, MultiFab& hydrovars, int 
 
             // curr_gyr = OutArray*curr_i*curr_j/total_mass
             com_onegrid_i.Multiply(com_onegrid_i, com_onegrid_j, 0, 0, 1, 0);
-            com_onegrid_i.Multiply(com_onegrid_i, hydrovars, comp, 0, 1, 0);
+            com_onegrid_i.Multiply(com_onegrid_i, droplet, 0, 0, 1, 0);
             S[i*3+j] = com_onegrid_i.sum(0)/total_mass;
         }
     }
     return S;
 }
 
-GpuArray<Real,3> axial_radii(MultiFab& hydrovars, int comp = 1){
+GpuArray<Real,3> axial_radii(MultiFab& droplet){
     BL_PROFILE_VAR("axial_radii()",axial_radii);
     GpuArray<Real,3> com;
     GpuArray<Real,9> S;
     GpuArray<Real,3> radii;
 
-    com = center_of_mass(hydrovars, comp);
-    S = gyration_tensor(com, hydrovars, comp);
+    com = center_of_mass(droplet);
+    S = gyration_tensor(com, droplet);
 
     const char JOBVL = 'N'; // const char* as input to eigenval calc
     const char JOBVR = 'N'; // const char* as input to eigenval calc
