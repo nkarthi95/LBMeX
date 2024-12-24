@@ -45,7 +45,7 @@ void main_driver(const char* argv) {
   int output_hdf = 0;
 
   // run output
-  int record_start = 550000;
+  int record_start = 2000000;
   int record_interval = 10;
   int binarize = 1;
 
