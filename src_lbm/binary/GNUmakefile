@@ -11,6 +11,7 @@ DIM	= 3
 
 COMP    = gnu
 
+USE_FFT   = TRUE
 USE_MPI   = TRUE
 USE_HDF5  = TRUE
 USE_OMP   = FALSE
