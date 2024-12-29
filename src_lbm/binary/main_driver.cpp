@@ -7,78 +7,106 @@
 #include <StructFact.H>
 
 using namespace amrex;
+
 #include "LBM_binary.H"
-#include "tests.H"
-#include "LBM_IO.H"
+#include "LBM_fluctuations.H"
+#include "LBM_tests.H"
+
+inline Vector<std::string> VariableNames(const int numVars) {
+  // set variable names for output
+  Vector<std::string> var_names(numVars);
+  std::string name;
+  int cnt = 0;
+  // rho, phi
+  if (cnt<numVars) var_names[cnt++] = "density";
+  if (cnt<numVars) var_names[cnt++] = "phi";
+  // velx, vely, velz
+  for (int d=0; d<AMREX_SPACEDIM, cnt<numVars; d++) {
+    name = "u";
+    name += (120+d);
+    var_names[cnt++] = name;
+  }
+  for (int d=0; d<AMREX_SPACEDIM, cnt<numVars; d++) {
+    name = "phi*u";
+    name += (120+d);
+    var_names[cnt++] = name;
+  }
+  // pxx, pxy, pxz, pyy, pyz, pzz
+  // for (int i=0; i<AMREX_SPACEDIM; ++i) {
+  //   for (int j=i; j<AMREX_SPACEDIM; ++j) {
+  //     name = "p";
+  //     name += (120+i);
+  //     name += (120+j);
+  //     var_names[cnt++] = name;
+  //   }
+  // }
+  // remaining moments
+  for (; cnt<nvel+ncons, cnt<numVars;) {
+    name = "mf";
+    name += std::to_string(cnt-ncons);
+    var_names[cnt++] = name;
+  }
+  for (; cnt<numVars;) {
+    name = "mg";
+    name += std::to_string(cnt-nvel);
+    var_names[cnt++] = name;
+  }
+  return var_names;
+}
+
+inline void WriteOutput(int step,
+			const MultiFab& hydrovs,
+			const Geometry& geom) {
+  // set up variable names for output
+  const Vector<std::string> var_names = VariableNames(2*nvel);
+  const std::string& pltfile = amrex::Concatenate("plt",step,5);
+  WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
+}
 
 void main_driver(const char* argv) {
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
-  
-  const std::string hydro_plt = "hydro_plt_";
-  const std::string SF_plt = "SF_plt";
-  const std::string hydro_chk = "chk_hydro_";
-  const std::string SF_chk = "chk_SF_";
-
+    
   // default grid parameters
-  int nx = 16; int ny = 16; int nz = 16;
+  int nx = 16;
   int max_grid_size = 8;
-  int ic = 0;
-  Real R = 0.3;
 
   // default time stepping parameters
   int nsteps = 100;
-  int dump_hydro = 1;
-  int n_hydro = 10;
-  int dump_SF = 1;
-  int n_SF = 10;
-  int n_checkpoint = nsteps;
-  int start_step = 0;
-  int output_hdf = 0;
+  int plot_int = 10;
 
   // input parameters
   ParmParse pp;
-  // box parameters
   pp.query("nx", nx);
-  pp.query("ny", ny);
-  pp.query("nz", nz);
   pp.query("max_grid_size", max_grid_size);
-  pp.query("init_cond", ic);
-  pp.query("nz", nz);
-  pp.query("R", R);
-
-  // plot parameters
   pp.query("nsteps", nsteps);
-  pp.query("dump_hydro", dump_hydro);
-  pp.query("n_hydro", n_hydro);
-  pp.query("dump_SF", dump_SF);
-  pp.query("n_SF", n_SF);
-  pp.query("n_checkpoint", n_checkpoint);
-  pp.query("start_step", start_step);
-  pp.query("output_hdf5", output_hdf);
-
-  // model parameters
+  pp.query("plot_int", plot_int);
   pp.query("kappa", kappa);
   pp.query("lambda", chi);
   pp.query("T", T);
   pp.query("temperature", temperature);
-  pp.query("gamma", Gamma);
 
   // set up Box and Geomtry
   IntVect dom_lo(0, 0, 0);
-  IntVect dom_hi(nx-1, ny-1, nz-1);
+  IntVect dom_hi(nx-1, nx-1, nx-1);
   Array<int,3> periodicity({1,1,1});
+
   Box domain(dom_lo, dom_hi);
+
   RealBox real_box({0.,0.,0.},{1.,1.,1.});
+  
   Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);
+
   BoxArray ba(domain);
+
   // split BoxArray into chunks no larger than "max_grid_size" along a direction
   ba.maxSize(max_grid_size);
+
   DistributionMapping dm(ba);
+
   // need two halo layers for gradients
   int nghost = 2;
-  Real time = start_step;
 
   // set up MultiFabs
   MultiFab fold(ba, dm, nvel, nghost);
@@ -87,15 +115,13 @@ void main_driver(const char* argv) {
   MultiFab gnew(ba, dm, nvel, nghost);
   MultiFab hydrovs(ba, dm, 2*nvel, nghost);
   MultiFab noise(ba, dm, 2*nvel, nghost);
-  MultiFab ref_params(ba, dm, 2, nghost); //reference rho and C for each point of the lattice
 
-  // structure factor stuff
   int nStructVars = 5;
   const Vector<std::string> var_names = VariableNames(nStructVars);
-  Vector<Real> var_scaling(nStructVars*(nStructVars+1)/2); var_scaling.assign(var_scaling.size(), 1.);
-  // for (int i=0; i<var_scaling.size(); ++i) {
-  //   if (temperature>0) var_scaling[i] = temperature; else var_scaling[i] = 1.;
-  // }
+  Vector<Real> var_scaling(nStructVars*(nStructVars+1)/2);
+  for (int i=0; i<var_scaling.size(); ++i) {
+    if (temperature>0) var_scaling[i] = temperature; else var_scaling[i] = 1.;
+  }
   StructFact structFact(ba, dm, var_names, var_scaling);
 
   // INITIALIZE
@@ -117,45 +143,10 @@ void main_driver(const char* argv) {
     Print() << "LB step " << step << "\n";
   }
 
-  if (n_checkpoint > 0 && ic != 10){WriteCheckPoint(start_step, hydrovs, hydro_chk);start_step = 0;}
-  // checkpoint read of hydrovs to generate fold and gold to be used for further simulations
-
-  // hydrovs.Copy(ref_params, hydrovs, 0, 0, 2, nghost);
-  // Write a plotfile of the initial data if plot_int > 0
-  if (dump_hydro == 1 and ic != 10){WriteOutput(start_step, hydrovs, geom, hydro_plt, output_hdf);}
-  Print() << "LB initialized\n";
-  start_step++;
-
-  // TIMESTEP
-  for (int step=start_step; step <= nsteps; ++step) {
-    LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, ref_params);
-
-    if (dump_SF == 1 && temperature > 0){structFact.FortStructure(hydrovs, geom);}
-
-    if (n_checkpoint > 0 && step%n_checkpoint == 0){
-      WriteCheckPoint(step, hydrovs, hydro_chk);
-      if (temperature > 0){structFact.WriteCheckPoint(0,SF_chk);}
-    }
-    
-    if (dump_hydro == 1 && step%n_hydro == 0){WriteOutput(step, hydrovs, geom, hydro_plt, output_hdf);}
-
-    if(dump_SF == 1 && step%n_SF == 0 && temperature > 0){
-      structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0);
-      StructFact structFact(ba, dm, var_names, var_scaling);
-      }
-
-    // if (plot_int > 0 && step%plot_int ==0) {
-    //   WriteOutput(step, hydrovs, geom, hydro_plt);
-    //   if (temperature > 0){
-    //     // WriteOutput(step, noise, geom, "xi_plt"); 
-    //     structFact.WritePlotFile(step, static_cast<Real>(step), geom, SF_plt, 0); // remove 0 if k = 0 point is to be zeroed in output
-    //     StructFact structFact(ba, dm, var_names, var_scaling);}
-    // }
-    Print() << "LB step " << step << " completed\n";
-  }
   // Call the timer again and compute the maximum difference between the start time 
   // and stop time over all processors
   Real stop_time = ParallelDescriptor::second() - strt_time;
   ParallelDescriptor::ReduceRealMax(stop_time);
   amrex::Print() << "Run time = " << stop_time << std::endl;
+  
 }
