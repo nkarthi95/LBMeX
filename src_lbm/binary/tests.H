@@ -74,94 +74,70 @@ bool cholesky_test(const int ntrial) {
     return status;
 }
 
+bool equilibrium_test(int x, int y, int z, const Array4<Real>& h) {
+    bool test = true;
 
-void generate_ifft_test_noise(const Geometry& geom, MultiFab& kspace_noise_real, MultiFab& kspace_noise_imag, int nx, int k){
-    const Box domain = geom.Domain();
-    Real set_val = 1.;
+    // test that the direct computation of the equilibrium moments
+    // equals the transformation of the equilibrium distributions
 
-    for (MFIter mfi(kspace_noise_real); mfi.isValid(); ++mfi) {
-        const Box& box = mfi.validbox();
-        const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
-        const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
-        int idx = 0;
+    const Array1D<Real,0,2> fields = { h(x,y,z,0), h(x,y,z,1) };
+    const RealVect u = { h(x,y,z,2), h(x,y,z,3), h(x,y,z,4) };
 
-        // sin in <1 0 0> direction
-        xi_real(1*k, 0, 0, idx) = set_val;
-        // Print() << xi_real(1*k, 0, 0, idx) << "\n";
-        idx++;
-        // sin in <0 1 0> direction
-        xi_real(0, 1*k, 0, idx) = set_val;
-        idx++;
-        // sin in <0 0 1> direction
-        xi_real(0, 0, 1*k, idx) = set_val;
-        idx++;
-        // sin in <1 1 0> direction
-        xi_real(1*k, 1*k, 0, idx) = set_val;
-        idx++;
-        // sin in <1 0 1> direction
-        xi_real(1*k, 0, 1*k, idx) = set_val;
-        idx++;
-        // sin in <0 1 1> direction
-        xi_real(0, 1*k, 1*k, idx) = set_val;
-        idx++;
-        // sin in <1 1 1> direction
-        xi_real(1*k, 1*k, 1*k, idx) = set_val;
-        idx++;
-        // sin in <-1 1 1> direction
-        xi_real(nx - 1*k, 1*k, 1*k, idx) = set_val;
-        idx++;
-        // sin in <1 -1 1> direction
-        xi_real(1*k, nx - 1*k, 1*k, idx) = set_val;
-        idx++;
-        // sin in <1 1 -1> direction
-        xi_real(1*k, 1*k, nx - 1*k, idx) = set_val;
-        idx++;
-  }
+    const Array1D<RealVect,0,2> gradients = {
+        gradient(x,y,z,h,0),
+        gradient(x,y,z,h,1),
+    };
+
+    const Array1D<Real,0,2> laplacians = {
+        laplacian(x,y,z,h,0),
+        laplacian(x,y,z,h,1),
+    };
+
+    const Array1D<Real,0,2> mu = chemical_potentials(fields, gradients, laplacians);
+
+    Array1D<Real,0,nvel> f = fequilibrium(fields, gradients, laplacians, u);
+    Array1D<Real,0,nvel> mf = fequilibrium_moments(fields, gradients, laplacians, u);
+    Array1D<Real,0,nvel> g = gequilibrium(fields(1), mu(1), u);
+    Array1D<Real,0,nvel> mg = gequilibrium_moments(fields, mu, u);
+
+    Array1D<Real,0,nvel> mf_transformed, mg_transformed;
+    for (int k=0; k<nvel; k++) {
+        mf_transformed(k) = 0.0;
+        mg_transformed(k) = 0.0;
+        for (int i=0; i<nvel; i++) {
+            mf_transformed(k) += e[k][i] * f(i);
+            mg_transformed(k) += e[k][i] * g(i);
+        }
+    }
+    for (int k=0; k<nvel; k++) {
+        if (fabs(mf(k)-mf_transformed(k)) > FLT_EPSILON || fabs(mg(k)-mg_transformed(k) > FLT_EPSILON)) {
+            test = false;
+            break;
+        }
+    }
+
+    return test;
 }
 
-void test_case_ifft(){
-    int L = 32; int reps = 1;
-    int nghost = 1;
-    int NVAR = 38;
-    bool unpack = false;
-    int step = 0;
-    Real time = step;
+bool equilibrium_test(const Geometry& geom, MultiFab& hydrovs) {
+    for (MFIter mfi(hydrovs); mfi.isValid(); ++mfi) {
+        const Array4<Real>& h = hydrovs.array(mfi);
+        const Box& valid_box = mfi.growntilebox(1);
+        ParallelFor(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z) {
+            bool test = true;
+            test = equilibrium_test(x, y, z, h);
+            if (!test) {
+                Print() << "equilibrium test failed!" << std::endl;
+                exit(-1);
+            }
+        });
+    }
+    return false;
+}
 
-    Vector<std::string> var_names(NVAR);
-    for(int i = 0; i < NVAR; i++){var_names[i] = "Test case " + std::to_string(i + 1);}
-
-    // set up Box and Geomtry
-    IntVect dom_lo(0, 0, 0);
-    IntVect dom_hi(L - 1, L - 1, L - 1);
-    Array<int,3> periodicity({1,1,1});
-    Box domain(dom_lo, dom_hi);
-    RealBox real_box({0.,0.,0.},{1.,1.,1.});
-    Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);
-    BoxArray ba(domain);
-    ba.maxSize(L);
-    DistributionMapping dm(ba);
-
-    Print() << "Box created \n";
-
-    MultiFab noise(ba, dm, NVAR, nghost);
-    MultiFab variables_dft_real(ba, dm, NVAR, 0);
-    MultiFab variables_dft_imag(ba, dm, NVAR, 0);
-    MultiFab output(ba, dm, NVAR, nghost);
-    noise.setVal(0.);variables_dft_real.setVal(0.);variables_dft_imag.setVal(0.);output.setVal(0.);
-    // int kx = 0; int ky = 0; int kz = 0;
-    
-    generate_ifft_test_noise(geom, variables_dft_real, variables_dft_imag, L, reps);
-    WriteSingleLevelPlotfile("ifft_test_plt_input", variables_dft_real, var_names, geom, 0, 0);
-    Print() << "data generated \n";
-    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag);
-    WriteSingleLevelPlotfile("ifft_test_plt", noise, var_names, geom, 0, 0);
-    Print() << "IFFT completed \n";
-
-    variables_dft_real.setVal(0.);variables_dft_imag.setVal(0.);output.setVal(0.);
-    compute_fft(geom, noise, variables_dft_real, variables_dft_imag, NVAR, unpack);
-    
-    noise.setVal(0.);
-    compute_ifft(geom, noise, variables_dft_real, variables_dft_imag);
-    WriteSingleLevelPlotfile("ifft_to_fft_to_ifft_test_plt", noise, var_names, geom, 0, 0);
-    Print() << "FFT_to_iFFT completed \n";
+bool unit_tests(const Geometry& geom, MultiFab& hydrovs) {
+    bool status = true;
+    status &= cholesky_test(100);
+    status &= equilibrium_test(geom, hydrovs);
+    return status;
 }

@@ -4,16 +4,14 @@
 #include <AMReX_Print.H>
 #include <AMReX_ParmParse.H>
 #include <AMReX_PlotFileUtil.H>
-#include "StructFact.H"
+#include <StructFact.H>
+
 using namespace amrex;
 #include "LBM_binary.H"
 #include "tests.H"
 #include "LBM_IO.H"
 
 void main_driver(const char* argv) {
-  // fft_test();
-  // test_case_ifft();
-  // if (!cholesky_test(100)) exit(-1);
 
   // store the current time so we can later compute total run time.
   Real strt_time = ParallelDescriptor::second();
@@ -101,25 +99,22 @@ void main_driver(const char* argv) {
   StructFact structFact(ba, dm, var_names, var_scaling);
 
   // INITIALIZE
-  switch(ic){
-    case 0:
-      LBM_init_mixture(fold, gold, hydrovs, ref_params);
-      break;
-    case 1:
-      LBM_init_flat_interface(geom, fold, gold, hydrovs, ref_params);
-      break;
-    case 2:
-      LBM_init_droplet(R, geom, fold, gold, hydrovs, ref_params);
-      break;
-    case 10:
-      checkpointRestart(start_step, hydrovs, hydro_chk, fold, gold, ba, dm);--start_step;
-      const std::string& checkpointname = amrex::Concatenate(SF_chk,0,9);
-      bool test_file_path = file_exists(checkpointname);
-      if (test_file_path and temperature > 0){
-        StructFact structFact;
-        structFact.ReadCheckPoint(SF_chk,ba,dm);
-      }
-      break;
+  LBM_init_mixture(fold, gold, hydrovs);
+  // Write a plotfile of the initial data if plot_int > 0
+  if (plot_int > 0) WriteOutput(0, hydrovs, geom);
+  Print() << "LB initialized\n";
+
+  unit_tests(geom, hydrovs);
+
+  // TIMESTEP
+  for (int step=1; step <= nsteps; ++step) {
+    LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
+    structFact.FortStructure(hydrovs, geom);
+    if (plot_int > 0 && step%plot_int ==0) {
+      WriteOutput(step, hydrovs, geom);
+      structFact.WritePlotFile(step, static_cast<Real>(step), geom, "plt_SF", 0);
+    }
+    Print() << "LB step " << step << "\n";
   }
 
   if (n_checkpoint > 0 && ic != 10){WriteCheckPoint(start_step, hydrovs, hydro_chk);start_step = 0;}

@@ -103,9 +103,7 @@ Real pressure(Real rho, Real C,
   return p0;
 }
 
-#include "LBM_fluctuations.H"
-
-#if 0 // equilibrium populations not necessary for MRT
+#if 1 // equilibrium populations not necessary for MRT
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> fequilibrium(const Array1D<Real,0,2>& fields,
 			      const Array1D<RealVect,0,2>& gradients,
@@ -210,7 +208,7 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   return mEq;
 }
 
-#if 0 // equilibrium populations not necessary for MRT
+#if 1 // equilibrium populations not necessary for MRT
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> gequilibrium(const Real& phi,
 			      const Real& mu_phi,
