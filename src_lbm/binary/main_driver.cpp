@@ -28,7 +28,7 @@ inline void ReadInput() {
   pp.query("plot_int", plot_int);
 
   /* binary fluid parameters */
-  pp.query("chi", chi);
+  pp.query("lambda", chi);
   pp.query("T", T);
   pp.query("kappa", kappa);
   pp.query("gamma", Gamma);
