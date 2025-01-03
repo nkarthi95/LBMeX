@@ -1,11 +1,9 @@
 AMREX_HOME ?= ../../../amrex
 FHDEX_HOME ?= ../../../FHDeX
-HDF5_HOME = /usr/lib/x86_64-linux-gnu/hdf5/openmpi
 
 DEFINES += -DMAX_SPECIES=2
 
 DEBUG	= FALSE
-TINY_PROFILE = TRUE
 
 DIM	= 3
 
@@ -13,7 +11,6 @@ COMP    = gnu
 
 USE_FFT   = TRUE
 USE_MPI   = TRUE
-USE_HDF5  = TRUE
 USE_OMP   = FALSE
 USE_CUDA  = FALSE
 USE_HIP   = FALSE
@@ -36,9 +33,8 @@ include $(AMREX_HOME)/Tools/GNUMake/Make.rules
 
 ifeq ($(USE_CUDA),TRUE)
   LIBRARIES += -lcufft
+  LIBRARIES += -lculapack
 else
   LIBRARIES += $(shell pkg-config --libs fftw3)
-  LIBRARIES += $(shell pkg-config --libs blas)
   LIBRARIES += $(shell pkg-config --libs lapack)
-  LIBRARIES += $(shell pkg-config --libs lapacke)
 endif
