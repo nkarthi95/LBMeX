@@ -3,27 +3,18 @@
 
 #include "LBM_d3q19.H"
 
+const int ncons = 2 + AMREX_SPACEDIM; // number of conserved variables (2 scalar fields + velocity)
+const int ndof = 2*nvel; // number of degrees of freedom
+
 AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
 AMREX_GPU_MANAGED Real tau_p = 1.0;
 
-AMREX_GPU_MANAGED Real kappa = 0.0;
+AMREX_GPU_MANAGED Real chi = 0.4;
+AMREX_GPU_MANAGED Real T = 0.25;
 
-AMREX_GPU_MANAGED Real lambda = 1.1;
-AMREX_GPU_MANAGED Real T = 0.6;
+AMREX_GPU_MANAGED Real kappa = 0.01;
 
 AMREX_GPU_MANAGED Real Gamma = 1.0;
-
-AMREX_GPU_MANAGED Real temperature = 0.0;
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real pressure(Real rho, Real phi);
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
-				  const Array1D<RealVect,0,2>& gradients,
-				  const Array1D<Real,0,2>& laplacians);
-
-#include "LBM_fluctuations.H"
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -64,11 +55,11 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
 #if 0
   /* mu_rho is not needed for the calculations.
      The following expression has not been tested. */
-  mu(0) = lambda/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho;
+  mu(0) = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho;
 #endif
 
   mu(1) = // Eq. (38) in Swift et al.
-    - lambda/2.*phi/rho + T/2*log((rho+phi)/(rho-phi)) - kappa*D2phi;
+    - chi/2.*phi/rho + T/2*log((rho+phi)/(rho-phi)) - kappa*D2phi;
 
   return mu;
 }
@@ -82,8 +73,7 @@ Real pressure(Real rho, Real phi) {
   return p0;
 }
 
-
-#if 0 // equilibrium populations not necessary for MRT
+#if 1 // equilibrium populations not necessary for MRT
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> fequilibrium(const Array1D<Real,0,2>& fields,
 			      const Array1D<RealVect,0,2>& gradients,
@@ -187,7 +177,7 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   return mEq;
 }
 
-#if 0 // equilibrium populations not necessary for MRT
+#if 1 // equilibrium populations not necessary for MRT
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> gequilibrium(const Real& phi,
 			      const Real& mu_phi,
@@ -289,51 +279,16 @@ void relax_moments(int x, int y, int z,
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-void thermalize_moments(Array1D<Real,0,nvel>& mf,
-			Array1D<Real,0,nvel>& mg,
-			RandomEngine const& engine) {
-  const Real rho = mf(0);
-  const Real phi = mg(0);
-  const Real gamma_r = 1. - 1./tau_r;
-  const Real gamma_p = 1. - 1./tau_p;
-  const Real phi_r = sqrt(rho*temperature/cs2*(1.-gamma_r*gamma_r));
-  const Real phi_p = sqrt(phi*temperature/cs2*(1.-gamma_p*gamma_p));
-  Array<Real,nvel> r = {}; // {} to value initialize r
-  for (int i=4; i<nvel; ++i) {
-    mf(i) += sqrt(b[i])*phi_r*RandomNormal(0., 1., engine);
-    mg(i) += sqrt(b[i])*phi_p*RandomNormal(0., 1., engine);
-  }
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-void thermalize_moments(int x, int y, int z,
-      Array1D<Real,0,nvel>& mf, Array1D<Real,0,nvel>& mg,
-      const Array4<Real>& noise) {
-  // diffusive moments 1,2,3 in noise at 5,6,7
-  for (int i=1; i<ncons; ++i) {
-    mg(i) += (1. - 0.5/tau_p) * noise(x,y,z,ncons+i);
-  }
-  // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
-  for (int i=ncons; i<nvel; ++i) {
-    mf(i) += (1. - 0.5/tau_r) * noise(x,y,z,ncons+i);
-    mg(i) += (1. - 0.5/tau_p) * noise(x,y,z,nvel+i);
-  }
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void collide(int x, int y, int z,
 	     const Array4<Real>& f,
 	     const Array4<Real>& g,
-	     const Array4<Real>& h,
-       const Array4<Real>& noise) {
+	     const Array4<Real>& h) {
   Array1D<Real,0,nvel> mf, mg;
 
   mf = moments(x,y,z,f);
   mg = moments(x,y,z,g);
 
   relax_moments(x,y,z,mf,mg,h);
-
-  thermalize_moments(x,y,z,mf,mg,noise);
 
   populations(x,y,z,f,mf);
   populations(x,y,z,g,mg);
@@ -359,10 +314,8 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void collide_stream(int x, int y, int z,
 		    const Array4<Real>& fOld,  const Array4<Real>& gOld,
 		    const Array4<Real>& fNew,  const Array4<Real>& gNew,
-		    const Array4<Real>& h,
-        const Array4<Real>& noise,
-		    RandomEngine const& rng) {
-  collide(x, y, z, fOld, gOld, h, noise); // collide populations on current site
+		    const Array4<Real>& h) {
+  collide(x, y, z, fOld, gOld, h); // collide populations on current site
   stream_push(x, y, z, fOld, gOld, fNew, gNew); // push populations to neighbors
 }
 
@@ -370,11 +323,10 @@ void collide_stream(int x, int y, int z,
 inline void collide_stream(const Geometry& geom,
 			   MultiFab& fold, MultiFab& gold,
 			   MultiFab& fnew, MultiFab& gnew,
-			   MultiFab& hydrovs, MultiFab& noise) {
+			   MultiFab& hydrovs) {
   const int halo = 1; // need to push from first halo layer into domain
   fold.FillBoundary(geom.periodicity());
   gold.FillBoundary(geom.periodicity());
-  noise.FillBoundary(geom.periodicity());
   hydrovs.FillBoundary(geom.periodicity());
   for (MFIter mfi(fold); mfi.isValid(); ++mfi) {
     const Array4<Real>& fOld = fold.array(mfi);
@@ -382,14 +334,44 @@ inline void collide_stream(const Geometry& geom,
     const Array4<Real>& fNew = fnew.array(mfi);
     const Array4<Real>& gNew = gnew.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
-    const Array4<Real>& xi = noise.array(mfi);
     const Box& valid_box = mfi.growntilebox(halo);
-    ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      collide_stream(x, y, z, fOld, gOld, fNew, gNew, h, xi, engine);
+    ParallelFor(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z) {
+      collide_stream(x, y, z, fOld, gOld, fNew, gNew, h);
     });
   }
   MultiFab::Swap(fold, fnew, 0, 0, nvel, 0);
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
+}
+
+inline Vector<std::string> hydrovars_names(const int numVars) {
+  Vector<std::string> var_names(numVars);
+  std::string name;
+  int cnt = 0;
+  // rho, phi
+  if (cnt<numVars) var_names[cnt++] = "rho";
+  if (cnt<numVars) var_names[cnt++] = "phi";
+  // u
+  for (int d=0; d<AMREX_SPACEDIM && cnt<numVars; d++) {
+    name = "u";
+    name += (120+d);
+    var_names[cnt++] = name;
+  }
+  // j
+  for (int d=0; d<AMREX_SPACEDIM && cnt<numVars; d++) {
+    name = "j";
+    name += (120+d);
+    var_names[cnt++] = name;
+  }
+  // remaining moments
+  for (; cnt<nvel+AMREX_SPACEDIM+1 && cnt<numVars;) {
+    name = "mf" + std::to_string(cnt-(AMREX_SPACEDIM+1));
+    var_names[cnt++] = name;
+  }
+  for (; cnt<2*nvel && cnt<numVars;) {
+    name = "mg"+std::to_string(cnt-nvel);
+    var_names[cnt++] = name;
+  }
+  return var_names;
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -401,13 +383,13 @@ void hydrovars(int x, int y, int z,
   const Array1D<Real,0,nvel> mg = moments(x,y,z,g);
   h(x,y,z,0) = mf(0);
   h(x,y,z,1) = mg(0);
-  for (int i=1; i<ncons; ++i) {
-    h(x,y,z,i+1) = mf(i)/mf(0);
-    h(x,y,z,i+ncons) = mg(i);
+  for (int i=1; i<=AMREX_SPACEDIM; ++i) {     // momentum/diffusive flux i=1..3
+    h(x,y,z,i+1) = mf(i)/mf(0);               // f to be stored in 2..4
+    h(x,y,z,i+1+AMREX_SPACEDIM) = mg(i);      // g to be stored in 5..7
   }
-  for (int i=ncons; i<nvel; ++i) {
-    h(x,y,z,i+ncons) = mf(i);
-    h(x,y,z,i+nvel) = mg(i);
+  for (int i=1+AMREX_SPACEDIM; i<nvel; ++i) { // remaining moments i=4..18
+    h(x,y,z,i+1+AMREX_SPACEDIM) = mf(i);      // f to be stored in 8..22
+    h(x,y,z,i+nvel) = mg(i);                  // g to be stored in 23..37
   }
 }
 
@@ -425,10 +407,8 @@ inline void hydrovars(MultiFab& mf, MultiFab& mg, MultiFab& hydrovs) {
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
 			 MultiFab& fnew, MultiFab& gnew,
-			 MultiFab& hydrovs, MultiFab& noise) {
-  generate_fluctuations(geom, hydrovs, noise);
-  // noise.setVal(0.);
-  collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
+			 MultiFab& hydrovs) {
+  collide_stream(geom, fold, gold, fnew, gnew, hydrovs);
   hydrovars(fold, gold, hydrovs);
 }
 
@@ -444,7 +424,7 @@ inline void LBM_init_mixture(MultiFab& mf,
     const Array4<Real>& g = mg.array(mfi);
     ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
       const Real rho = C1 + C2;
-      const Real phi = (C1-C2)+0.001*RandomNormal(0., 1., engine);
+      const Real phi = (C1-C2);
       for (int i=0; i<nvel; i++) {
         f(x,y,z,i) = w[i]*rho;
         g(x,y,z,i) = w[i]*phi;

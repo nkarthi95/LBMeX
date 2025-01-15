@@ -9,6 +9,7 @@ DIM	= 3
 
 COMP    = gnu
 
+USE_FFT   = TRUE
 USE_MPI   = TRUE
 USE_OMP   = FALSE
 USE_CUDA  = FALSE
@@ -30,12 +31,10 @@ include $(AMREX_HOME)/Src/Base/Make.package
 
 include $(AMREX_HOME)/Tools/GNUMake/Make.rules
 
-ifeq ($(findstring cgpu, $(HOST)), cgpu)
-  CXXFLAGS += $(FFTW)
-endif
-
 ifeq ($(USE_CUDA),TRUE)
   LIBRARIES += -lcufft
+  LIBRARIES += -lculapack
 else
   LIBRARIES += $(shell pkg-config --libs fftw3)
+  LIBRARIES += $(shell pkg-config --libs lapack)
 endif

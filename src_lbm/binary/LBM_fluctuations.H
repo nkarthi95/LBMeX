@@ -1,24 +1,20 @@
 #ifndef LBM_FLUCTUATIONS_H_
 #define LBM_FLUCTUATIONS_H_
 
-#ifdef AMREX_USE_CUDA
-#include <cufft.h>
-#else
-#include <fftw3.h>
-#include <fftw3-mpi.h>
-#endif
-#include <AMReX_GpuComplex.H>
+#include <AMReX_FFT.H>
+#include <lapack.h>
 
-#include "LBM_d3q19.H"
 #include "LBM_binary.H"
+#include "LBM_tests.H"
 
-const int ncons = 2 + AMREX_SPACEDIM;
-const int ndof = 2*nvel;
+AMREX_GPU_MANAGED Real temperature = 1e-7;
 
 // Cholesky decomposition of matrix A
 // result is stored in lower triangle of A
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void cholesky_decomp(GpuArray<Real,ndof*ndof>& A, const int n, const int bstart) {
+
+#ifdef AMREX_USE_CUDA
   // Cholesky-Banachiewicz algorithm
   Real sum;
   for (int i=bstart; i<n; ++i) {
@@ -28,337 +24,148 @@ void cholesky_decomp(GpuArray<Real,ndof*ndof>& A, const int n, const int bstart)
 	      sum -= A[i*n+k]*A[j*n+k];
       }
       if (i==j) {
-	      if (sum>=0) {
-	        A[i*n+j] = std::sqrt(sum);
-	      } else {
-	        A[i*n+j] = 0.0;
-          Print() << "Row " << i << " matrix not positive definite! " << sum << std::endl;
-          exit(-1);
-	      }
+	      A[i*n+j] = std::sqrt(sum);
       } else {
-	      if (A[j*n+j]>0) {
-	        A[i*n+j] = sum/A[j*n+j];
-	      } else {
-          Print() << "Cholesky decomposition should not reach " << __FILE__ <<":"<< __LINE__ << std::endl;
-	        exit(-1);
-	      }
+	      A[i*n+j] = sum/A[j*n+j];
       }
     }
   }
-  for (int i=0; i<n; ++i) {
-    for (int j=i+1; j<n; ++j) {
-      A[i*n+j] = 0.0;
-    }
-  }
-}
-
-#if 0
-// generate a pure sine wave in k-space
-inline void create_kspace_sin(const Geometry& geom,
-			      const MultiFab& noise_onegrid,
-			      const Vector<std::unique_ptr<BaseFab<GpuComplex<Real>>>>& spectral_field) {
-  const Box domain = geom.Domain();
-  for (MFIter mfiter(noise_onegrid); mfiter.isValid(); ++mfiter) {
-    IntVect fft_size = domain.length();
-    fft_size[0] = fft_size[0]/2 + 1;
-    Box fft_box = Box(IntVect(0), fft_size - IntVect(1));
-    Array4<GpuComplex<Real>> const& xi = (*spectral_field[0]).array();
-    ParallelFor(fft_box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz) {
-      int kxloc = (kx == 0) ? 0 : domain.length(0) - kx;
-      int kyloc = (ky == 0) ? 0 : domain.length(1) - ky;
-      int kzloc = (kz == 0) ? 0 : domain.length(2) - kz;
-      if (   (kx == 0)
-	  && (ky == 1)
-	  && (kz == 1) ) {
-	xi(kx,ky,kz).m_real = 1.0;
-	xi(kx,ky,kz).m_imag = 0.0;
-      } else {
-	xi(kx,ky,kz).m_real = 0.0;
-	xi(kx,ky,kz).m_imag = 0.0;
-      }
-      if (kx > domain.length(0)/2) {
-	Print() << "This should never execute sin" << std::endl;
-	xi(kx,ky,kz).m_real = xi(kxloc,kyloc,kzloc).real();
-	xi(kx,ky,kz).m_imag = xi(kxloc,kyloc,kzloc).imag();
-      }
-    });
-  }
-}
+#else
+  const char uplo = 'U'; // we store the matrix in row major order (C-style)
+  const int order = n-bstart; // order of sub-matrix
+  const int lda = n; // leading dimension of entire matrix
+  const int offset = bstart*lda + bstart; // offset to sub-matrix starting at (bstart,bstart)
+  int info = 0;
+  LAPACK_dpotrf(&uplo, &order, A.data()+offset, &lda, &info);
 #endif
-
-#if 0
-// generate uncorrelated white noise in k-space
-// requires whole domain without domain decomposition
-inline void kspace_white_noise(const Geometry& geom,
-			       MultiFab& kspace_noise_real_onegrid,
-			       MultiFab& kspace_noise_imag_onegrid) {
-  const Box domain = geom.Domain();
-  for (MFIter mfi(kspace_noise_real_onegrid); mfi.isValid(); ++mfi) {
-    const Box& box = mfi.fabbox();
-    const Array4<Real>& xi_real = kspace_noise_real_onegrid.array(mfi);
-    const Array4<Real>& xi_imag = kspace_noise_imag_onegrid.array(mfi);
-    // construct noise in k-space
-    ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
-      int kxloc = (kx == 0) ? 0 : domain.length(0) - kx;
-      int kyloc = (ky == 0) ? 0 : domain.length(1) - ky;
-      int kzloc = (kz == 0) ? 0 : domain.length(2) - kz;
-      // symmetry points are purely real
-      if (((kx == 0) || (kx == domain.length(0) - kx))
-	  && ((ky == 0) || (ky == domain.length(1) - ky))
-	  && ((kz == 0) || (kz == domain.length(2) - kz))) {
-	xi_real(kx,ky,kz) = RandomNormal(0., 1., engine);
-	xi_imag(kx,ky,kz) = RandomNormal(0., 0., engine);
-      } else {
-	// complex conjugate symmetries
-	if ((kx > domain.length(0)/2)
-	    || ((ky > domain.length(1)/2) && (kx == kxloc))
-	    || ((kz > domain.length(2)/2) && (ky == kyloc) && (kx == kxloc))) {
-	  xi_real(kx,ky,kz) =  xi_real(kxloc,kyloc,kzloc);
-	  xi_imag(kx,ky,kz) = -xi_imag(kxloc,kyloc,kzloc);
-	} else {
-	  // complex Gaussian random variables with zero mean and variance 0.5
-	  xi_real(kx,ky,kz) = RandomNormal(0., std::sqrt(0.5), engine);
-	  xi_imag(kx,ky,kz) = RandomNormal(0., std::sqrt(0.5), engine);
-	}
-      }
-    });
-  }
-}
-#endif
-
-#if 0
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real structure_factor(int kx, int ky, int kz) {
-  const Real rho0 = 1.0;
-  const Real S = rho0*temperature/cs2;
-  return S;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> population_correlations(int kx, int ky, int kz) {
-  GpuArray<Real,ndof*ndof> F = {};
-  GpuArray<Real,nvel> fbar, gbar;
-  const Real rho0 = 1.0;
-  const Real mu0 = 0.0; // \todo
-  const Real S_r = structure_factor(kx,ky,kz);
-  const Real S_p = 0.0; // \todo
-  const Real mu = S_r/rho0;
-  for (int i=0; i<nvel; ++i) {
-    fbar[i] = w[i]*rho0;
-    gbar[i] = w[i]*Gamma*mu0;
-  }
-  /* density sector */
-  for (int i=0; i<nvel; ++i) {
-    for (int j=0; j<nvel; ++j) {
-      F[i*ndof+j] = (S_r/rho0 - mu)/rho0*fbar[i]*fbar[j];
-    }
-    F[i*ndof+i] += mu*fbar[i];
-  }
-  /* order parameter sector */
-  for (int i=nvel; i<ndof; ++i) {
-    for (int j=nvel; j<ndof; ++j) {
-    }
-    F[i*ndof+i] += S_p*gbar[i-nvel];
-  }
-  return F;
-}
-
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> moment_correlations(GpuArray<Real,ndof*ndof> F) {
-  GpuArray<Real,ndof*ndof> G = {};
-  // density sector
-  for (int i=0; i<nvel; ++i) {
-    for (int j=0; j<nvel; ++j) {
-      G[i*ndof+j] = 0.0;
-      for (int k=0; k<nvel; ++k) {
-	for (int l=0; l<nvel; ++l) {
-	  G[i*ndof+j] += e[i][k]*F[k*ndof+l]*e[j][l];
-	}
-      }
+  // zero out the upper triangle (lower triangle in column major order)
+  for (int i=0; i<n; i++) {
+    for (int j=0; j<i; j++) {
+      A[i+j*n] = 0.;
     }
   }
-  // order parameter sector
-  for (int i=nvel; i<ndof; ++i) {
-    for (int j=nvel; j<ndof; ++j) {
-      G[i*ndof+j] = 0.0;
-      for (int k=0; k<nvel; ++k) {
-	for (int l=0; l<nvel; ++l) {
-	  G[i*ndof+j] += e[i][k]*F[(k+nvel)*ndof+(l+nvel)]*e[j][l];
-	}
-      }
-    }
-  }
-  return G;
-}
 
-// construct noise covariance matrix
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> noise_covariance(GpuArray<Real,ndof*ndof> const& G) {
-  GpuArray<Real,ndof*ndof> Xi;
-  for (int i=0; i<ndof; ++i) {
-    for (int j=0; j<ndof; ++j) {
-      Xi[i*ndof+j] = G[i*ndof+j];
-      for (int k=0; k<ndof; ++k) {
-	for (int l=0; l<ndof; ++l) {
-	  Xi[i*ndof+j] -= Lambda[i][k]*G[k*ndof+l]*Lambda[j][l];
-	}
-      }
-    }
-  }
-  return Xi;
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz) {
-  const GpuArray<Real,ndof*ndof> F = population_correlations(kx,ky,kz);
-  const GpuArray<Real,ndof*ndof> G = moment_correlations(F);
-  const GpuArray<Real,ndof*ndof> C = noise_covariance(G);
-  return C;
-}
-#endif
+Real fourier_laplace_operator(int ikx, int iky, int ikz, const Box& domain) {
+  Real k2;
 
-// construct noise covariance matrix of the modes in k-space
+  IntVect n = domain.length();
+
+  // FFTW convention for ordering of wave vectors
+  Real kx = (ikx < (n[0]+1)/2) ? 2.*M_PI/n[0]*ikx : 2.*M_PI/n[0]*(ikx-n[0]);
+  Real ky = (iky < (n[1]+1)/2) ? 2.*M_PI/n[1]*iky : 2.*M_PI/n[1]*(iky-n[1]);
+  Real kz = (ikz < (n[2]+1)/2) ? 2.*M_PI/n[2]*ikz : 2.*M_PI/n[2]*(ikz-n[2]);
+
+  Real cosx = cos(kx);
+  Real cosy = cos(ky);
+  Real cosz = cos(kz);
+
+  Real expr1 = cosx + cosy + cosz;
+  Real expr2 = cosx*cosy + cosy*cosz + cosx*cosz;
+  k2 = -2./cs2*(1./9.*expr1 + 1./9.*expr2 - 2./3.);
+
+  return k2;
+}
+
+// noise covariance matrix of the LB modes
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz) { // TODO: add function arguments: rho, phi, k, others?
+GpuArray<Real,ndof*ndof> noise_covariance_matrix(const Real rho0, const Real phi0, const Real k2) {
   const uint Q = nvel;
 
-  const Real lambda_r = 1/tau_r;
-  const Real lambda_p = 1/tau_p;
+  // TODO: generalize to MRT
+  const Real lambdaLB_r = -1./tau_r;
+  const Real lambdaLB_p = -1./tau_p;
+
+  // TODO: needs check!
+  const Real lambda_r = -lambdaLB_r*(2+lambdaLB_r)/2;
+  const Real lambda_p = -lambdaLB_p*(2+lambdaLB_p)/2;
+  const Real lambda_rp = -lambdaLB_r*(2+lambdaLB_p)/2;
+  const Real lambda_pr = -lambdaLB_p*(2+lambdaLB_r)/2;
+
+  // f = T/2*(rho+phi)*log((rho+phi)/2) + T/2*(rho-phi)*log((rho-phi)/2) - T*rho + chi/4*(rho**2-phi**2)/rho + kappa*(Drho**2+Dphi**2)
+  // p = rho*T - kappa*(rho*D2rho+phi*D2phi)
+  // mu =  T/2*log(rho+phi) - T/2*log(rho-phi) - chi/2*phi/rho - kappa*D2phi
   const Real kT = temperature;
-  /* NOTE: the expressions below are valid for lambda_e = lambda_b */
-
-  const Array1D<Real,0,2> fields = { 1, 0 };// = { h(x,y,z,0), h(x,y,z,1) };
-  const Array1D<RealVect,0,2> gradients = { RealVect(0,0,0), RealVect(0,0,0) };
-  const Array1D<Real,0,2> laplacians = { 0, 0 };
-
-  const Real k[3] = { (Real)kx, (Real)ky, (Real)kz };
-  const Real k2 = kx*kx + ky*ky + kz*kz;
-
-  const Real rho0 = fields(0);
-  const Real phi0 = fields(1);
-  const Real mu0 = chemical_potentials(fields, gradients, laplacians)(1);
-  const Real mu_phi = 0.5*T*(1./(rho0+phi0)+1./(rho0-phi0)) - 0.5*lambda/rho0 + kappa*k2;
-  const Real mu_rho = 0.5*lambda*phi0/(rho0*rho0) + 0.5*T*(1./(rho0+phi0)-1./(rho0-phi0));
-  const Real cs2 = T + rho0*kappa*k2;
+  const Real cs2 = T + kappa*k2*rho0; // p_rho => modified speed of sound
+  const Real p_phi = kappa*k2*phi0;
+  const Real mu_rho = -T*phi0/(rho0*rho0-phi0*phi0) + chi/2*phi0/(rho0*rho0);
+  const Real mu_phi = T*rho0/(rho0*rho0-phi0*phi0) - chi/2/rho0 + kappa*k2;
 
   // Noise covariance of the modes in k-space
   GpuArray<Real,ndof*ndof> Xi = {};
   
   Xi.fill(0);
 
-  // TODO: Check factors of phi0
-
   // diagonal part
-  Xi[(   5)*ndof+(   5)] = 2.*kT*pow(phi0, 2)/rho0*lambda_p;
-  Xi[(   6)*ndof+(   6)] = 2.*kT*pow(phi0, 2)/rho0*lambda_p;
-  Xi[(   7)*ndof+(   7)] = 2.*kT*pow(phi0, 2)/rho0*lambda_p;
+  Xi[(   5)*ndof+(   5)] = 2.*Gamma*kT/rho0*lambda_p;
+  Xi[(   6)*ndof+(   6)] = 2.*Gamma*kT/rho0*lambda_p;
+  Xi[(   7)*ndof+(   7)] = 2.*Gamma*kT/rho0*lambda_p;
+  Xi[(   8)*ndof+(   8)] = 2.*kT*rho0*(5 - 9*cs2)*lambda_r;
+  Xi[(   9)*ndof+(   9)] = 8.*kT*rho0*lambda_r;
+  Xi[(  10)*ndof+(  10)] = (8.0/3.0)*kT*rho0*lambda_r;
+  Xi[(  11)*ndof+(  11)] = (2.0/3.0)*kT*rho0*lambda_r;
+  Xi[(  12)*ndof+(  12)] = (2.0/3.0)*kT*rho0*lambda_r;
+  Xi[(  13)*ndof+(  13)] = (2.0/3.0)*kT*rho0*lambda_r;
+  Xi[(  14)*ndof+(  14)] = 4.*kT*rho0*lambda_r;
+  Xi[(  15)*ndof+(  15)] = 4.*kT*rho0*lambda_r;
+  Xi[(  16)*ndof+(  16)] = 4.*kT*rho0*lambda_r;
+  Xi[(  17)*ndof+(  17)] = (4.0/3.0)*kT*rho0*lambda_r;
+  Xi[(  18)*ndof+(  18)] = (4.0/3.0)*kT*rho0*lambda_r;
+  Xi[(Q+ 0)*ndof+(Q+ 0)] = (4.0/3.0)*kT*rho0*lambda_r;
+  Xi[(Q+ 1)*ndof+(Q+ 1)] = 18.*kT*rho0*(1 - cs2)*lambda_r;
+  Xi[(Q+ 2)*ndof+(Q+ 2)] = 8.*kT*rho0*lambda_r;
+  Xi[(Q+ 3)*ndof+(Q+ 3)] = (8.0/3.0)*kT*rho0*lambda_r;
+  Xi[(Q+ 4)*ndof+(Q+ 4)] = 2.*Gamma*kT/rho0*(-9*Gamma*mu_phi + 5)*lambda_p;
+  Xi[(Q+ 5)*ndof+(Q+ 5)] = 8.*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+ 6)*ndof+(Q+ 6)] = (8.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+ 7)*ndof+(Q+ 7)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+ 8)*ndof+(Q+ 8)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+ 9)*ndof+(Q+ 9)] = (2.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+10)*ndof+(Q+10)] = 4.*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+11)*ndof+(Q+11)] = 4.*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+12)*ndof+(Q+12)] = 4.*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+13)*ndof+(Q+13)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+14)*ndof+(Q+14)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+15)*ndof+(Q+15)] = (4.0/3.0)*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+16)*ndof+(Q+16)] = 18.*Gamma*kT/rho0*(-Gamma*mu_phi + 1)*lambda_p;
+  Xi[(Q+17)*ndof+(Q+17)] = 8.*Gamma*kT/rho0*lambda_p;
+  Xi[(Q+18)*ndof+(Q+18)] = (8.0/3.0)*Gamma*kT/rho0*lambda_p;
 
-  Xi[(   8)*ndof+(   8)] = 2.*rho0*kT*lambda_r*(5. - 9.*cs2);
-  Xi[(   9)*ndof+(   9)] = (8./3.)*rho0*kT*lambda_r;
-  Xi[(  10)*ndof+(  10)] = 8.*rho0*kT*lambda_r;
-  Xi[(  11)*ndof+(  11)] = (2./3.)*rho0*kT*lambda_r;
-  Xi[(  12)*ndof+(  12)] = (2./3.)*rho0*kT*lambda_r;
-  Xi[(  13)*ndof+(  13)] = (2./3.)*rho0*kT*lambda_r;
-  Xi[(  14)*ndof+(  14)] = 4.*rho0*kT*lambda_r;
-  Xi[(  15)*ndof+(  15)] = 4.*rho0*kT*lambda_r;
-  Xi[(  16)*ndof+(  16)] = 4.*rho0*kT*lambda_r;
-  Xi[(  17)*ndof+(  17)] = (4./3.)*rho0*kT*lambda_r;
-  Xi[(  18)*ndof+(  18)] = (4./3.)*rho0*kT*lambda_r;
-  Xi[(  19)*ndof+(  19)] = (4./3.)*rho0*kT*lambda_r;
-  Xi[(  20)*ndof+(  20)] = 18.*rho0*kT*lambda_r*(1. - cs2);
-  Xi[(  21)*ndof+(  21)] = (8./3.)*rho0*kT*lambda_r;
-  Xi[(  22)*ndof+(  22)] = 8.*rho0*kT*lambda_r;
+  // rho-rho sector [0, 2..4, 8..(Q+3)]
+  Xi[(   8)*ndof+(Q+ 1)] = 6.*kT*rho0*(3*cs2 - 1)*lambda_r;
+  Xi[(Q+ 1)*ndof+(   8)] = 6.*kT*rho0*(3*cs2 - 1)*lambda_r;
 
-  Xi[(Q+ 4)*ndof+(Q+ 4)] = 2.*kT*lambda_p*(9.*pow(Gamma, 2)*pow(mu0, 2) - 9.*Gamma*mu0*pow(phi0, 3)*mu_phi - 3.*Gamma*mu0*phi0 + 5.*pow(phi0, 4)*mu_phi)/(pow(phi0, 2)*rho0*mu_phi);
-  Xi[(Q+ 5)*ndof+(Q+ 5)] = (8./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+ 6)*ndof+(Q+ 6)] = 8.*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+ 7)*ndof+(Q+ 7)] = (2./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+ 8)*ndof+(Q+ 8)] = (2./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+ 9)*ndof+(Q+ 9)] = (2./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+10)*ndof+(Q+10)] = 4.*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+11)*ndof+(Q+11)] = 4.*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+12)*ndof+(Q+12)] = 4.*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+13)*ndof+(Q+13)] = (4./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+14)*ndof+(Q+14)] = (4./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+15)*ndof+(Q+15)] = (4./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+16)*ndof+(Q+16)] = 6.*kT*lambda_p*(3*pow(Gamma, 2)*pow(mu0, 2) - 3.*Gamma*mu0*pow(phi0, 3)*mu_phi - Gamma*mu0*phi0 + 3.*pow(phi0, 4)*mu_phi)/(pow(phi0, 2)*rho0*mu_phi);
-  Xi[(Q+17)*ndof+(Q+17)] = (8./3.)*kT*pow(phi0, 2)*lambda_p/rho0;
-  Xi[(Q+18)*ndof+(Q+18)] = 8.*kT*pow(phi0, 2)*lambda_p/rho0;
-
-  // rho-rho sector
-  Xi[(   1)*ndof+(   8)] = -3.*kT*phi0*k2*kappa*lambda_r/(rho0*mu_phi);
-  Xi[(   1)*ndof+(Q+ 1)] = 3.*kT*phi0*k2*kappa*lambda_r/(rho0*mu_phi);
-  Xi[(   2)*ndof+(   5)] = kT*phi0*rho0*lambda_p/rho0;
-  Xi[(   3)*ndof+(   6)] = kT*phi0*rho0*lambda_p/rho0;
-  Xi[(   4)*ndof+(   7)] = kT*phi0*rho0*lambda_p/rho0;
-  Xi[(   8)*ndof+(  20)] = 6.*rho0*kT*lambda_r*(3.*cs2 - 1.);
-  Xi[(   8)*ndof+(Q+ 1)] = 6.*rho0*kT*lambda_r*(3.*cs2 - 1.);
-  Xi[(   8)*ndof+(   1)] = Xi[(   1)*ndof+(   8)];
-  Xi[(Q+ 1)*ndof+(   1)] = Xi[(   1)*ndof+(Q+ 1)];
-  Xi[(   5)*ndof+(   2)] = Xi[(   2)*ndof+(   5)];
-  Xi[(   6)*ndof+(   3)] = Xi[(   3)*ndof+(   6)];
-  Xi[(   7)*ndof+(   4)] = Xi[(   4)*ndof+(   7)];
-  Xi[(Q+ 1)*ndof+(   8)] = Xi[(   8)*ndof+(Q+ 1)];
-  Xi[(  20)*ndof+(   8)] = Xi[(   8)*ndof+(  20)];
+  // phi-phi sector [1, 5..7, (Q+4)..(Q-1)]
+  Xi[(Q+ 4)*ndof+(Q+16)] = 6.*Gamma*kT/rho0*(3*Gamma*mu_phi - 1)*lambda_p;
+  Xi[(Q+16)*ndof+(Q+ 4)] = 6.*Gamma*kT/rho0*(3*Gamma*mu_phi - 1)*lambda_p;
 
   // rho-phi sector
-  Xi[(   0)*ndof+(Q+ 4)] = -3*Gamma*kT*rho0*lambda_p*mu_rho/cs2;
-  Xi[(   0)*ndof+(Q+16)] = 3*Gamma*kT*rho0*lambda_p*mu_rho/cs2;
-  Xi[(   1)*ndof+(Q+ 4)] = 3*Gamma*kT*lambda_p*(mu0 - phi0*mu_phi)/(phi0*rho0*mu_phi);
-  Xi[(   1)*ndof+(Q+16)] = 3*Gamma*kT*lambda_p*(-mu0 + phi0*mu_phi)/(phi0*rho0*mu_phi);
-  Xi[(   8)*ndof+(   1)] = -3.*kT*phi0*k2*kappa*lambda_r/(rho0*mu_phi);
-  Xi[(   8)*ndof+(Q+ 4)] = 3.*kT*k2*kappa*lambda_r*(-3.*Gamma*mu0 + phi0)/(rho0*mu_phi);
-  Xi[(   8)*ndof+(Q+16)] = 3.*kT*k2*kappa*lambda_r*(3.*Gamma*mu0 - phi0)/(rho0*mu_phi);
-  Xi[(  20)*ndof+(   1)] = 3.*kT*phi0*k2*kappa*lambda_r/(rho0*mu_phi);
-  Xi[(  20)*ndof+(Q+ 4)] = 3.*kT*k2*kappa*lambda_r*(3.*Gamma*mu0 - phi0)/(rho0*mu_phi);
-  Xi[(  20)*ndof+(Q+16)] = 3.*kT*k2*kappa*lambda_r*(-3.*Gamma*mu0 + phi0)/(rho0*mu_phi);
-  Xi[(Q+ 4)*ndof+(   0)] = Xi[(   0)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   0)] = Xi[(   0)*ndof+(Q+16)];
-  Xi[(Q+ 4)*ndof+(   1)] = Xi[(   1)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   1)] = Xi[(   1)*ndof+(Q+16)];
-  Xi[(   1)*ndof+(   8)] = Xi[(   8)*ndof+(   1)];
-  Xi[(Q+ 4)*ndof+(   8)] = Xi[(   8)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   8)] = Xi[(   8)*ndof+(Q+16)];
-  Xi[(   1)*ndof+(  20)] = Xi[(  20)*ndof+(   1)];
-  Xi[(Q+ 4)*ndof+(  20)] = Xi[(  20)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(  20)] = Xi[(  20)*ndof+(Q+16)];
+  Xi[(   8)*ndof+(Q+ 4)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(Q+ 4)*ndof+(   8)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(   8)*ndof+(Q+16)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(Q+16)*ndof+(   8)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
 
-  // phi-phi sector
-  // real entries
-  // TODO: Check these
-  //Xi[(   1)*ndof+(Q+ 4)] = 3.*Gamma*kT*mu0*lambda_p/(phi0*rho0*mu_phi);
-  //Xi[(   1)*ndof+(Q+16)] = -3.*Gamma*kT*mu0*lambda_p/(phi0*rho0*mu_phi);
-  Xi[(   1)*ndof+(Q+ 4)] = 3.*Gamma*kT*mu0*lambda_p/(rho0*mu_phi);///phi0
-  Xi[(   1)*ndof+(Q+16)] = -3.*Gamma*kT*mu0*lambda_p/(rho0*mu_phi);///phi0
-  Xi[(Q+ 1)*ndof+(Q+ 4)] = 3.*kT*k2*kappa*lambda_r*(3.*Gamma*mu0 - phi0)/(rho0*mu_phi);
-  Xi[(Q+ 1)*ndof+(Q+16)] = 3.*kT*k2*kappa*lambda_r*(-3.*Gamma*mu0 + phi0)/(rho0*mu_phi);
-  Xi[(Q+ 4)*ndof+(Q+16)] = 6.*kT*lambda_p*(-3.*pow(Gamma, 2)*pow(mu0, 2) + 3.*Gamma*mu0*pow(phi0, 3)*mu_phi + Gamma*mu0*phi0 - pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(Q+ 4)*ndof+(   1)] = Xi[(   1)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   1)] = Xi[(   1)*ndof+(Q+16)];
-  Xi[(Q+ 4)*ndof+(Q+ 1)] = Xi[(Q+ 1)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(Q+ 1)] = Xi[(Q+ 1)*ndof+(Q+16)];
-  Xi[(Q+16)*ndof+(Q+ 4)] = Xi[(Q+ 4)*ndof+(Q+16)];
+  Xi[(Q+ 1)*ndof+(Q+ 4)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(Q+ 4)*ndof+(Q+ 1)] = 3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(Q+ 1)*ndof+(Q+16)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
+  Xi[(Q+16)*ndof+(Q+ 1)] = -3.*kT*(Gamma*mu_phi*pow(rho0, 2)*(3*cs2 - 1)*mu_rho*lambda_pr + cs2*(3*Gamma*mu_phi - 1)*p_phi*lambda_rp)/(cs2*mu_phi*rho0);
 
-  // imaginary entries
-  Real I = 0; // ignore imaginary entries until we know how to handle them
-  Xi[(   1)*ndof+(   5)] = I*kT*k[0]*(-Gamma*mu0 + pow(phi0, 3)*mu_phi)/(rho0*mu_phi);///phi0
-  Xi[(   1)*ndof+(   6)] = I*kT*k[1]*(-Gamma*mu0 + pow(phi0, 3)*mu_phi)/(rho0*mu_phi);///phi0
-  Xi[(   1)*ndof+(   7)] = I*kT*k[2]*(-Gamma*mu0 + pow(phi0, 3)*mu_phi)/(rho0*mu_phi);///phi0
-  Xi[(   5)*ndof+(Q+ 4)] = I*kT*k[0]*(3.*pow(Gamma, 2)*pow(mu0, 2) - 3.*Gamma*mu0*pow(phi0, 3)*mu_phi - Gamma*mu0*phi0 + pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   5)*ndof+(Q+16)] = I*kT*k[0]*(-3.*pow(Gamma, 2)*pow(mu0, 2) + 3.*Gamma*mu0*pow(phi0, 3)*mu_phi + Gamma*mu0*phi0 - pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   6)*ndof+(Q+ 4)] = I*kT*k[1]*(3.*pow(Gamma, 2)*pow(mu0, 2) - 3.*Gamma*mu0*pow(phi0, 3)*mu_phi - Gamma*mu0*phi0 + pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   6)*ndof+(Q+16)] = I*kT*k[1]*(-3.*pow(Gamma, 2)*pow(mu0, 2) + 3.*Gamma*mu0*pow(phi0, 3)*mu_phi + Gamma*mu0*phi0 - pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   7)*ndof+(Q+ 4)] = I*kT*k[2]*(3.*pow(Gamma, 2)*pow(mu0, 2) - 3.*Gamma*mu0*pow(phi0, 3)*mu_phi - Gamma*mu0*phi0 + pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   7)*ndof+(Q+16)] = I*kT*k[2]*(-3.*pow(Gamma, 2)*pow(mu0, 2) + 3.*Gamma*mu0*pow(phi0, 3)*mu_phi + Gamma*mu0*phi0 - pow(phi0, 4)*mu_phi)/(rho0*mu_phi);///pow(phi0, 2)
-  Xi[(   5)*ndof+(   1)] = -Xi[(   1)*ndof+(   5)];
-  Xi[(   6)*ndof+(   1)] = -Xi[(   1)*ndof+(   6)];
-  Xi[(   7)*ndof+(   1)] = -Xi[(   1)*ndof+(   7)];
-  Xi[(Q+ 4)*ndof+(   5)] = -Xi[(   5)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   5)] = -Xi[(   5)*ndof+(Q+16)];
-  Xi[(Q+ 4)*ndof+(   6)] = -Xi[(   6)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   6)] = -Xi[(   6)*ndof+(Q+16)];
-  Xi[(Q+ 4)*ndof+(   7)] = -Xi[(   7)*ndof+(Q+ 4)];
-  Xi[(Q+16)*ndof+(   7)] = -Xi[(   7)*ndof+(Q+16)];
+  Xi[(   0)*ndof+(Q+ 4)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
+  Xi[(Q+ 4)*ndof+(   0)] = -3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
+  Xi[(   0)*ndof+(Q+16)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
+  Xi[(Q+16)*ndof+(   0)] = 3.*Gamma*kT*rho0*mu_rho/cs2*lambda_pr;
+  Xi[(   1)*ndof+(Q+ 1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
+  Xi[(Q+ 1)*ndof+(   1)] = 3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
+  Xi[(   1)*ndof+(   8)] = -3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
+  Xi[(   8)*ndof+(   1)] = -3.*kT*p_phi/(mu_phi*rho0)*lambda_rp;
+  Xi[(   2)*ndof+(   5)] = -phi0*kT*lambda_pr;
+  Xi[(   3)*ndof+(   6)] = -phi0*kT*lambda_pr;
+  Xi[(   4)*ndof+(   7)] = -phi0*kT*lambda_pr;
+  Xi[(   5)*ndof+(   2)] = -phi0*kT*lambda_pr;
+  Xi[(   6)*ndof+(   3)] = -phi0*kT*lambda_pr;
+  Xi[(   7)*ndof+(   4)] = -phi0*kT*lambda_pr;
 
   return Xi;
 }
@@ -366,13 +173,13 @@ GpuArray<Real,ndof*ndof> noise_covariance(int kx, int ky, int kz) { // TODO: add
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const Box& domain, RandomEngine const& engine) {
   GpuArray<GpuComplex<Real>,ndof> r = {};
-  for (int i=ncons+1; i<ndof; ++i) {
+  for (int i=ncons; i<ndof; ++i) {
     // symmetry points are purely real
     if (     ((kx == 0) || (kx == domain.length(0) - kx))
           && ((ky == 0) || (ky == domain.length(1) - ky))
           && ((kz == 0) || (kz == domain.length(2) - kz)) ) {
       // real Gaussian random variables with zero mean and variance 1
-      r[i] = { RandomNormal(0., 1., engine), RandomNormal(0., 0., engine) };
+      r[i] = { RandomNormal(0., 1., engine), 0.0 };
     } else {
       // complex Gaussian random variables with zero mean and variance 0.5
       r[i] = { RandomNormal(0., std::sqrt(0.5), engine), RandomNormal(0., std::sqrt(0.5), engine) };
@@ -389,9 +196,15 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
   GpuArray<GpuComplex<Real>,ndof> r, xi;
   GpuArray<Real,ndof*ndof> C;
 
+  const Real k2 = fourier_laplace_operator(kx, ky, kz, domain);
+
+  // TODO: Generalize to non-homogeneous case?
+  const Real rho0 = 1.0;
+  const Real phi0 = 0.0;
+
   // Cholesky decomposition of noise covariance matrix
-  C = noise_covariance(kx,ky,kz);
-  cholesky_decomp(C,ndof,ncons+1);
+  C = noise_covariance_matrix(rho0,phi0,k2);
+  cholesky_decomp(C,ndof,ncons);
 
   // need to generate the correct symmetries here? [uschill 07/25/2022]
   // possibly the case if C(k) != C(-k) [uschill 07/27/2022]
@@ -404,37 +217,38 @@ GpuArray<GpuComplex<Real>,ndof> correlated_noise(int kx, int ky, int kz,
       xi[i] += C[i*ndof+j]*r[j];
     }
   }
+
   return xi;
 }
 
-// generate k-space noise for all non-conserved moments
-// the required symmetries are not included here because of grid decomposition
-// (this is to allow parallel generation of noise)
-// the symmetries are handled when copying to one whole grid
+// generate k-space noise for all moments
+// the required symmetries for the c2r fft are generated here
+// kspace_noise needs to have 1D domain decomposition
 inline void generate_kspace_noise(const Geometry& geom,
-				  MultiFab& kspace_noise_real,
-				  MultiFab& kspace_noise_imag) {
+          FabArray<BaseFab<GpuComplex<Real>>>& kspace_noise) {
   const Box domain = geom.Domain();
 
-  // include density? [uschill 07/26/2022]
-
-  // generate noise in whole box because of grid decomposition
-  // (generating noise without grid decomposition may be faster)
-  for (MFIter mfi(kspace_noise_real); mfi.isValid(); ++mfi) {
-    const Box& box = mfi.validbox();
-    const Array4<Real>& xi_real = kspace_noise_real.array(mfi);
-    const Array4<Real>& xi_imag = kspace_noise_imag.array(mfi);
-    // construct noise in k-space
-    ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
-      if (kx <= domain.length(0)/2) { // need only half of k-space for c2r FFT
-        GpuArray<GpuComplex<Real>,ndof> xi = {};
-
-	      // compute correlated noise in k-space
-	      xi = correlated_noise(kx,ky,kz,domain,engine);
-
-        for (int i=0; i<ndof; ++i) {
-          xi_real(kx,ky,kz,i) = xi[i].real();
-          xi_imag(kx,ky,kz,i) = xi[i].imag();
+  // generate k-space noise in half-domain
+  // cf. https://github.com/AMReX-Codes/amrex/discussions/4284
+  for (MFIter mfi(kspace_noise); mfi.isValid(); ++mfi) {
+    auto const& xi_array = kspace_noise.array(mfi);
+    ParallelForRNG(mfi.validbox(), [=] AMREX_GPU_DEVICE(int kx, int ky, int kz, RandomEngine const& engine) {
+      int kxloc = (kx == 0) ? 0 : domain.length(0) - kx;
+      int kyloc = (ky == 0) ? 0 : domain.length(1) - ky;
+      int kzloc = (kz == 0) ? 0 : domain.length(2) - kz;
+      if (    ( (kx != kxloc) )
+           || ( (kz <= kzloc) && (ky <= kyloc) )
+           || ( (kz <= kzloc) && (kz != kzloc) ) ) {
+        // compute correlated noise in k-space
+        GpuArray<GpuComplex<Real>,ndof> xi = correlated_noise(kx,ky,kz,domain,engine);
+        for (int i=0; i<ndof; ++i) xi_array(kx,ky,kz,i) = xi[i];
+        if (    ( (kx == kxloc) && (ky <= kyloc) )
+             || ( (kx == kxloc) && (kz <= kzloc) ) ) {
+          for (int i=0; i<ndof; ++i) {
+            // set conjugate symmetry at special locations (forward copy to avoid race conditions)
+            xi_array(kxloc,kyloc,kzloc,i).m_real =  xi_array(kx,ky,kz,i).real();
+            xi_array(kxloc,kyloc,kzloc,i).m_imag = -xi_array(kx,ky,kz,i).imag();
+          }
         }
       }
     });
@@ -442,253 +256,202 @@ inline void generate_kspace_noise(const Geometry& geom,
 
 }
 
-#if 1
-inline void check_kspace_symmetries(const Geometry& geom,
-				    const MultiFab& noise_onegrid,
-				    const Vector<std::unique_ptr<BaseFab<GpuComplex<Real>>>>& spectral_field) {
-  const Box domain = geom.Domain();
-  IntVect fft_size = domain.length();
-  fft_size[0] = fft_size[0]/2 + 1;
-  Box fft_box = Box(IntVect(0), fft_size - IntVect(1));
-  Array4<GpuComplex<Real>> const& xi = (*spectral_field[0]).array();
-  for (MFIter mfi(noise_onegrid); mfi.isValid(); ++mfi) {
-    ParallelFor(fft_box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz) {
-      bool symmetric = true;
-      int kxloc = (kx == 0) ? 0 : domain.length(0) - kx;
-      int kyloc = (ky == 0) ? 0 : domain.length(1) - ky;
-      int kzloc = (kz == 0) ? 0 : domain.length(2) - kz;
-      // symmetry points are purely real
-      if (((kx == 0) || (kx == domain.length(0) - kx))
-	  && ((ky == 0) || (ky == domain.length(1) - ky))
-	  && ((kz == 0) || (kz == domain.length(2) - kz))) {
-	symmetric &= (xi(kx,ky,kz).imag() == 0);
-	if (!symmetric) {
-	  Print() << "symmetry violation 1! ("
-		  << kx << "," << ky << "," << kz << ") "
-		  << xi(kx,ky,kz).imag() << " "
-	          << symmetric << " " << (xi(kx,ky,kz).imag() == 0.)
-		  << std::endl;
-	  exit(0);
-	}
-      }
-      if (kx > domain.length(0)/2) {
-	Print() << "This should never execute" << std::endl;
-	symmetric &= ((xi(kx,ky,kz).real() ==  xi(kxloc,kyloc,kzloc).real())
-		   && (xi(kx,ky,kz).imag() == -xi(kxloc,kyloc,kzloc).imag()));
-	if (!symmetric) {
-	  Print() << "symmetry violation 2! ("
-		  << kx << "," << ky << "," << kz << ")"
-		  << std::endl;
-	  exit(0);
-	}
-      } else {
-	if ((ky > domain.length(1)/2) && (kx == kxloc)) {
-	  symmetric &= ((xi(kx,ky,kz).real() ==  xi(kxloc,kyloc,kzloc).real())
-		     && (xi(kx,ky,kz).imag() == -xi(kxloc,kyloc,kzloc).imag()));
-	  if (!symmetric) {
-	    Print() << "symmetry violation 3a! ("
-		    << kx << "," << ky << "," << kz << ") ("
-	            << kxloc << "," << kyloc << "," << kzloc << ")"
-	            << " " << xi(kx,ky,kz).real() << " " << xi(kxloc,kyloc,kzloc).real()
-		    << " " << xi(kx,ky,kz).imag() << " " << xi(kxloc,kyloc,kzloc).imag()
-		    << std::endl;
-	    exit(0);
-	  }
-	} else {
-	  if ((kz > domain.length(2)/2) && (ky == kyloc) && (kx == kxloc)) {
-	    symmetric &= ((xi(kx,ky,kz).real() ==  xi(kxloc,kyloc,kzloc).real())
-		       && (xi(kx,ky,kz).imag() == -xi(kxloc,kyloc,kzloc).imag()));
-	    if (!symmetric) {
-	      Print() << "symmetry violation 3b! ("
-		      << kx << "," << ky << "," << kz << ") ("
-		      << kxloc << "," << kyloc << "," << kzloc << ")"
-		      << " " << xi(kx,ky,kz).real() << " " << xi(kxloc,kyloc,kzloc).real()
-		      << " " << xi(kx,ky,kz).imag() << " " << xi(kxloc,kyloc,kzloc).imag()
-		      << std::endl;
-	      exit(0);
-	    }
-	  } // if ((kz > domain.length(2)/2) ...
-	} // if ((ky > domain.length(1)/2) ...
-      } // if ((kx > domain.length(0)/2) ...
-    });
-  }
-  return;
-}
-#endif
+inline void compute_ifft(const Geometry& geom,
+    const FabArray<BaseFab<GpuComplex<Real>>>& kspace_noise, /* in */
+    MultiFab& realspace_noise /* out */) {
 
-inline void compute_ifft(const Geometry& geom, MultiFab& realspace_noise,
-			 const MultiFab& kspace_noise_real,
-			 const MultiFab& kspace_noise_imag) {
+  Box domain = geom.Domain();
 
-#ifdef AMREX_USE_CUDA
-    //Print() << "Using cuFFT\n";
-    using FFTplan = cufftHandle;
-    using FFTcomplex = cuDoubleComplex;
-#else
-    //Print() << "Using FFTW\n";
-    using FFTplan = fftw_plan;
-    using FFTcomplex = fftw_complex;
-#endif
+  FFT::R2C fft(geom.Domain());
+  //auto const& [cba, cdm] = fft.getSpectralDataLayout();
+  // TODO: kspace noise is only needed in half domain for FFT::R2C
+  // this currently conflicts with the symmetry check
+  // for now, copy the whole domain, until global symmetry is sorted out in parallel
 
-    // BoxArray and DistributionMapping for whole domain without decomposition
-    Box domain = geom.Domain();
-    BoxArray ba_onegrid(domain);
-    DistributionMapping dm_onegrid(ba_onegrid);
+  // TODO: Check if AMReX FFT can do fft per component [uschill 2025/01/01]
 
-    // FFT needs the whole grid without grid decomposition
-    MultiFab noise_onegrid(ba_onegrid, dm_onegrid, 1, 0);
-    MultiFab kspace_noise_real_onegrid(ba_onegrid, dm_onegrid, 1, 0);
-    MultiFab kspace_noise_imag_onegrid(ba_onegrid, dm_onegrid, 1, 0);
+  for (int k=0; k<ndof; ++k) {
+    // alias MultiFabs for one of the ndof components
+    MultiFab realspace_noise_one(realspace_noise, amrex::make_alias, k, 1);
+    FabArray<BaseFab<GpuComplex<Real>>> kspace_noise_one(kspace_noise, amrex::make_alias, k, 1);
+
+    fft.backward(kspace_noise_one, realspace_noise_one);
 
     // number of sites for normalization of FFT
-    long npts = domain.length(0)*domain.length(1)*domain.length(2);
-    Real sqrtnpts = std::sqrt(npts);
-
-    // Box for the complex conjugate spectral field (x-size is halved plus one)
-    IntVect fft_size = domain.length();
-    IntVect fft_adjust = { fft_size[0]/2 - 1, 0, 0 };
-    Box fft_box = Box(IntVect(0), fft_size-fft_adjust-IntVect(1));
-
-    // container to store the complex k-space noise for inverse FFT
-    Vector<std::unique_ptr<BaseFab<GpuComplex<Real>>>> spectral_field;
-
-    // is this a memory leak? [uschill 07/24/2022]
-    spectral_field.emplace_back(new BaseFab<GpuComplex<Real>>(fft_box,1,The_Device_Arena()));
-
-    // for CUDA builds we only need to build the plan once; track whether we did
-    bool built_plan = false;
-    Vector<FFTplan> fftw_plans;
-    FFTplan plan;
-
-    for (int k=0; k<ndof; ++k) {
-
-      // first copy the k-th conponent of the noise to one grid
-      // may be faster to generate the noise here? [uschill 07/27/2022]
-      kspace_noise_real_onegrid.ParallelCopy(kspace_noise_real,k,0,1);
-      kspace_noise_imag_onegrid.ParallelCopy(kspace_noise_imag,k,0,1);
-
-      // create the FFT plans
-      if (!built_plan) {
-	      for (MFIter mfi(noise_onegrid); mfi.isValid(); ++mfi) {
-
-#ifdef AMREX_USE_CUDA
-	        cufftResult result = cufftPlan3d(&plan, fft_size[2], fft_size[1], fft_size[0], CUFFT_C2R);
-	        if (result != CUFFT_SUCCESS) {
-	          amrex::AllPrint() << " cufftplan3d forward failed! Error: "
-			        << cufftErrorToString(result) << "\n";
-	        }
-#else
-	        plan = fftw_plan_dft_c2r_3d(fft_size[2], fft_size[1], fft_size[0],
-				      reinterpret_cast<FFTcomplex*>
-				      (spectral_field.back()->dataPtr()),
-				      noise_onegrid[mfi].dataPtr(),
-				      FFTW_ESTIMATE);
-#endif
-	        fftw_plans.push_back(plan);
-	      }
-	      built_plan = true;
-      }
-
-      ParallelDescriptor::Barrier(); // is this needed? [uschill 07/25/2022]
-
-      // copy the complex noise to the spectral field for complex-to-real FFT
-      // this takes care of the required k-space symmetries
-      for (MFIter mfi(noise_onegrid); mfi.isValid(); ++mfi) {
-	      Array4<Real> const& xi_real = kspace_noise_real_onegrid.array(mfi);
-	      Array4<Real> const& xi_imag = kspace_noise_imag_onegrid.array(mfi);
-	      Array4<GpuComplex<Real>> const& xi = (*spectral_field[0]).array();
-	      ParallelFor(fft_box, [=] AMREX_GPU_DEVICE(int kx, int ky, int kz) {
-	        //if (kx <= domain.length(0)/2)
-	        {
-	          // regular points
-            xi(kx,ky,kz).m_real = xi_real(kx,ky,kz);
-            xi(kx,ky,kz).m_imag = xi_imag(kx,ky,kz);
-            // symmetry points (corners of first quadrant) are purely real
-            //if (((kx == 0) || (kx == domain.length(0) - kx))
-            //	&& ((ky == 0) || (ky == domain.length(1) - ky))
-            //	&& ((kz == 0) || (kz == domain.length(2) - kz))) {
-            //  xi(kx,ky,kz).m_imag = 0;
-            //}
-            // complex conjugate symmetries
-            int kxloc = (kx == 0) ? 0 : domain.length(0) - kx;
-            int kyloc = (ky == 0) ? 0 : domain.length(1) - ky;
-            int kzloc = (kz == 0) ? 0 : domain.length(2) - kz;
-            if (kx > domain.length(0)/2) {
-              Print() << "This should never execute" << std::endl;
-              xi(kx,ky,kz).m_real =  xi_real(kxloc,kyloc,kzloc);
-              xi(kx,ky,kz).m_imag = -xi_imag(kxloc,kyloc,kzloc);
-            }
-            if  ( ( (ky > domain.length(1)/2) && (kx == kxloc) )
-            || ( (kz > domain.length(2)/2) && (ky == kyloc) && (kx == kxloc) ) ) {
-              xi(kx,ky,kz).m_real =  xi_real(kxloc,kyloc,kzloc);
-              xi(kx,ky,kz).m_imag = -xi_imag(kxloc,kyloc,kzloc);
-            }
-          }
-	      });
-      }
-
-      ParallelDescriptor::Barrier();
-      check_kspace_symmetries(geom,noise_onegrid,spectral_field);
-
-      // inverse FFT (complex to real)
-      for (MFIter mfi(noise_onegrid); mfi.isValid(); ++mfi) {
-	      int i = mfi.LocalIndex();
-#ifdef AMREX_USE_CUDA
-	      cufftSetStream(forward_plan[i], amrex::Gpu::gpuStream());
-	      cufftResult result = cufftExecC2R(forward_plan[i],
-					  reinterpret_case<FFTcomplex*>
-					  (field[i]->dataPtr()),
-					  noise_onegrid[mfi].dataPtr());
-	      if (result != CUFFT_SUCCESS) {
-	        amrex::AllPrint() << " forward transform using cufftExec failed! Error: "
-			      << cufftErrorToString(result) << "\n";
-	      }
-#else
-	      fftw_execute(fftw_plans[i]);
-#endif
-      }
-
-      // copy the real-space noise back to the k-th component of the MultiFab
-      realspace_noise.ParallelCopy(noise_onegrid,0,k,1);
-      // normalization from FFT
-      realspace_noise.mult(1./sqrtnpts,k,1);
-
-    }
-
-    // destroy fft plans
-    for (int i=0; i<fftw_plans.size(); ++i) {
-#ifdef AMREX_USE_CUDA
-      cufftDestroy(fftw_plans[i]);
-#else
-      fftw_destroy_plan(fftw_plans[i]);
-#endif
-    }
+    long n_sites = domain.length(0)*domain.length(1)*domain.length(2);
+    realspace_noise_one.mult(1./std::sqrt(n_sites));
+  }
 
 }
 
 // LB thermalization procedure for spatially correlated, non-diagonal noise
-inline void generate_fluctuations(const Geometry& geom,
+inline void generate_correlated_fluctuations(const Geometry& geom,
 				  MultiFab& hydrovs,
 				  MultiFab& noise) {
-  BoxArray ba = noise.boxArray();
-  DistributionMapping dm = noise.DistributionMap();
-  MultiFab kspace_noise_real(ba, dm, ndof, 0);
-  MultiFab kspace_noise_imag(ba, dm, ndof, 0);
 
-  kspace_noise_real.setVal(0.);
-  kspace_noise_imag.setVal(0.);
-
-  // TODO: check if this takes care of ndof entries!?
+  // k-space noise is generated in half domain with 1D domain decomposition
+  IntVect fft_size = geom.Domain().length();
+  fft_size[0] = fft_size[0]/2+1;
+  Box cdomain(IntVect(0), fft_size-1);
+  BoxArray cba = decompose(cdomain, ParallelDescriptor::NProcs(), {true,false,false});
+  DistributionMapping cdm(cba);
+  FabArray<BaseFab<GpuComplex<Real>>> kspace_noise(cba, cdm, ndof, 0);
 
   // generate noise in k-space
-  generate_kspace_noise(geom, kspace_noise_real, kspace_noise_imag);
-
-  // note that the k-space noise is generated without the required symmetries
-  // (this is to allow for parallel generation of noise)
-  // the k-space symmetries are handled when copying in compute_ifft
+  generate_kspace_noise(geom, kspace_noise);
 
   // inverse Fourier transform noise vector to real space
-  compute_ifft(geom, noise, kspace_noise_real, kspace_noise_imag);
+  compute_ifft(geom, kspace_noise, noise);
 
 }
+
+// compute spatially uncorrelated noise vector from Gaussian random variables
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const RandomEngine& engine) {
+  GpuArray<Real,ndof> r, xi;
+  GpuArray<Real,ndof*ndof> C;
+
+  // Cholesky decomposition of noise covariance matrix
+  C = noise_covariance_matrix(rho0,phi0,0);
+  cholesky_decomp(C,ndof,ncons);
+
+  // random white noise
+  for (int i=ncons; i<ndof; ++i) {
+    r[i] = RandomNormal(0., 1., engine);
+  }
+
+  // compute noise vector from Gaussian random variables
+  for (int i=0; i<ndof; ++i) {
+    xi[i] = 0;
+    for (int j=0; j<=i; ++j) {
+      xi[i] += C[i*ndof+j]*r[j];
+    }
+  }
+
+  return xi;
+}
+
+// generate real-space noise for all non-conserved moments
+inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
+  for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
+    const Box& box = mfi.validbox();
+    const Array4<Real>& xi = noise.array(mfi);
+    const Array4<Real>& h = hydrovs.array(mfi);
+    ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+      const Real rho0 = h(x,y,z,0);
+      const Real phi0 = h(x,y,z,1);
+      GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
+      for (int i=0; i<ndof; ++i) {
+        xi(x,y,z,i) = r[i];
+      }
+    });
+  }
+}
+
+#if 0
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void thermalize_moments(Array1D<Real,0,nvel>& mf,
+			Array1D<Real,0,nvel>& mg,
+			RandomEngine const& engine) {
+  const Real rho = mf(0);
+  const Real phi = mg(0);
+  const Real gamma_r = 1. - 1./tau_r;
+  const Real gamma_p = 1. - 1./tau_p;
+  const Real phi_r = sqrt(rho*temperature/cs2*(1.-gamma_r*gamma_r));
+  const Real phi_p = sqrt(phi*temperature/cs2*(1.-gamma_p*gamma_p));
+  Array<Real,nvel> r = {}; // {} to value initialize r
+  for (int i=4; i<nvel; ++i) {
+    mf(i) += sqrt(b[i])*phi_r*RandomNormal(0., 1., engine);
+    mg(i) += sqrt(b[i])*phi_p*RandomNormal(0., 1., engine);
+  }
+}
+#endif
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void thermalize_moments(int x, int y, int z,
+      Array1D<Real,0,nvel>& mf, Array1D<Real,0,nvel>& mg,
+      const Array4<Real>& noise) {
+  // diffusive moments 1,2,3 in noise at 5,6,7
+  for (int i=1; i<=AMREX_SPACEDIM; ++i) {
+    mg(i) += noise(x,y,z,i+1+AMREX_SPACEDIM);
+  }
+  // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
+  for (int i=1+AMREX_SPACEDIM; i<nvel; ++i) {
+    mf(i) += noise(x,y,z,i+1+AMREX_SPACEDIM);
+    mg(i) += noise(x,y,z,i+nvel);
+  }
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void collide(int x, int y, int z,
+	     const Array4<Real>& f,
+	     const Array4<Real>& g,
+	     const Array4<Real>& h,
+       const Array4<Real>& noise) {
+  Array1D<Real,0,nvel> mf, mg;
+
+  mf = moments(x,y,z,f);
+  mg = moments(x,y,z,g);
+
+  relax_moments(x,y,z,mf,mg,h);
+
+  thermalize_moments(x,y,z,mf,mg,noise);
+
+  populations(x,y,z,f,mf);
+  populations(x,y,z,g,mg);
+
+}
+
+// collide and stream (push scheme)
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void collide_stream(int x, int y, int z,
+		    const Array4<Real>& fOld,  const Array4<Real>& gOld,
+		    const Array4<Real>& fNew,  const Array4<Real>& gNew,
+		    const Array4<Real>& h,
+        const Array4<Real>& noise,
+		    RandomEngine const& rng) {
+  collide(x, y, z, fOld, gOld, h, noise); // collide populations on current site
+  stream_push(x, y, z, fOld, gOld, fNew, gNew); // push populations to neighbors
+}
+
+// apply fluctuating lattice Boltzmann equation for whole lattice
+inline void collide_stream(const Geometry& geom,
+			   MultiFab& fold, MultiFab& gold,
+			   MultiFab& fnew, MultiFab& gnew,
+			   MultiFab& hydrovs, MultiFab& noise) {
+  const int halo = 1; // need to push from first halo layer into domain
+  fold.FillBoundary(geom.periodicity());
+  gold.FillBoundary(geom.periodicity());
+  noise.FillBoundary(geom.periodicity());
+  hydrovs.FillBoundary(geom.periodicity());
+  for (MFIter mfi(fold); mfi.isValid(); ++mfi) {
+    const Array4<Real>& fOld = fold.array(mfi);
+    const Array4<Real>& gOld = gold.array(mfi);
+    const Array4<Real>& fNew = fnew.array(mfi);
+    const Array4<Real>& gNew = gnew.array(mfi);
+    const Array4<Real>& h = hydrovs.array(mfi);
+    const Array4<Real>& xi = noise.array(mfi);
+    const Box& valid_box = mfi.growntilebox(halo);
+    ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+      collide_stream(x, y, z, fOld, gOld, fNew, gNew, h, xi, engine);
+    });
+  }
+  MultiFab::Swap(fold, fnew, 0, 0, nvel, 0);
+  MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
+}
+
+// LB timestep for whole lattice
+inline void LBM_timestep(const Geometry& geom,
+			 MultiFab& fold, MultiFab& gold,
+			 MultiFab& fnew, MultiFab& gnew,
+			 MultiFab& hydrovs, MultiFab& noise) {
+#if UNCORRELATED_NOISE
+    generate_fluctuations(geom, hydrovs, noise);
+#else
+    generate_correlated_fluctuations(geom, hydrovs, noise);
+#endif
+  collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
+  hydrovars(fold, gold, hydrovs);
+}
+
 #endif
