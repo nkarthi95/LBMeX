@@ -32,6 +32,8 @@ inline void ReadInput() {
   max_box_size[2] = max_box_size[1] = max_box_size[0]; // default to same maxSize in all directions
   pp.query("max_grid_size_y", max_box_size[1]);
   pp.query("max_grid_size_z", max_box_size[2]);
+  pp.query("init_cond", init_cond);
+  pp.query("droplet_radius_prop", droplet_radius_prop);
 
   /* time stepping and output parameters */
   pp.query("nsteps", nsteps);
@@ -56,9 +58,9 @@ inline void WriteOutput(int step,
   const int zero_avg = 1;
   const int nvars = 5;
   const Vector<std::string> var_names = hydrovars_names(nvars);
-  const std::string& pltfile = amrex::Concatenate("plt",step,5);
+  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,5);
   WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
-  structFact.WritePlotFile(step, static_cast<Real>(step), geom, "plt_SF", zero_avg);
+  structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);
 }
 
 void main_driver(const char* argv) {
@@ -100,16 +102,31 @@ void main_driver(const char* argv) {
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
   // INITIALIZE
-  LBM_init_mixture(fold, gold, hydrovs);
+  switch(init_cond){
+    case 0:
+      LBM_init_mixture(fold, gold, hydrovs);
+      break;
+    case 1:
+      LBM_init_flat_interface(geom, fold, gold, hydrovs);
+      break;
+    case 2:
+      LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
+      break;
+    default:
+      Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
+  }
   if (plot_int > 0) WriteOutput(0, geom, hydrovs, structFact);
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
+  #if AMREX_DEBUG
   unit_tests(geom, hydrovs);
+  #endif
 
   // TIMESTEP
   for (int step=1; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
-    structFact.FortStructure(hydrovs, geom);
+    // structFact.FortStructure(hydrovs, geom);
+    structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int ==0) {
       WriteOutput(step, geom, hydrovs, structFact);
       Print() << "LB step " << step << std::endl;

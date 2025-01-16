@@ -16,6 +16,9 @@ AMREX_GPU_MANAGED Real kappa = 0.01;
 
 AMREX_GPU_MANAGED Real Gamma = 1.0;
 
+AMREX_GPU_MANAGED int init_cond = 0;
+AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
   RealVect gradient = { 0.0, 0.0, 0.0 };
@@ -324,6 +327,7 @@ inline void collide_stream(const Geometry& geom,
 			   MultiFab& fold, MultiFab& gold,
 			   MultiFab& fnew, MultiFab& gnew,
 			   MultiFab& hydrovs) {
+  BL_PROFILE_VAR("collide_stream()",collide_stream);
   const int halo = 1; // need to push from first halo layer into domain
   fold.FillBoundary(geom.periodicity());
   gold.FillBoundary(geom.periodicity());
@@ -395,6 +399,7 @@ void hydrovars(int x, int y, int z,
 
 // calculate hydrodynamic moments for whole lattice
 inline void hydrovars(MultiFab& mf, MultiFab& mg, MultiFab& hydrovs) {
+  BL_PROFILE_VAR("hydrovars()",hydrovars);
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
   auto const & h = hydrovs.arrays();
@@ -408,6 +413,7 @@ inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
 			 MultiFab& fnew, MultiFab& gnew,
 			 MultiFab& hydrovs) {
+  BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs);
   hydrovars(fold, gold, hydrovs);
 }
@@ -440,6 +446,7 @@ inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mg,
 				    MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
+  const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -458,9 +465,9 @@ inline void LBM_init_flat_interface(const Geometry& geom,
     Real phi;
 
     if (rx < 0.) {
-      phi = 0.5;
+      phi = phi0;
     } else {
-      phi = -0.5;
+      phi = -phi0;
     }
 
     for (int i=0; i<nvel; i++) {
@@ -480,6 +487,7 @@ inline void LBM_init_droplet(const Real r,
 			     MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
   const Real R = r*box[0];
+  const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -496,7 +504,6 @@ inline void LBM_init_droplet(const Real r,
     const Real r = sqrt(r2);
 
     const Real rho = 1.0;
-    const Real phi0 = 0.5;
     const Real phi = phi0*tanh((R-r)/sqrt(kappa));
 
     for (int i=0; i<nvel; i++) {

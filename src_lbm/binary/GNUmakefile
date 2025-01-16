@@ -4,7 +4,7 @@ FHDEX_HOME ?= ../../../FHDeX
 DEFINES += -DMAX_SPECIES=2
 
 DEBUG	= FALSE
-
+TINY_PROFILE = TRUE
 DIM	= 3
 
 COMP    = gnu

@@ -172,6 +172,7 @@ GpuArray<Real,ndof*ndof> noise_covariance_matrix(const Real rho0, const Real phi
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 GpuArray<GpuComplex<Real>,ndof> kspace_white_noise(int kx, int ky, int kz, const Box& domain, RandomEngine const& engine) {
+  BL_PROFILE_VAR("kspace_white_noise()",kspace_white_noise);
   GpuArray<GpuComplex<Real>,ndof> r = {};
   for (int i=ncons; i<ndof; ++i) {
     // symmetry points are purely real
@@ -259,7 +260,7 @@ inline void generate_kspace_noise(const Geometry& geom,
 inline void compute_ifft(const Geometry& geom,
     const FabArray<BaseFab<GpuComplex<Real>>>& kspace_noise, /* in */
     MultiFab& realspace_noise /* out */) {
-
+  BL_PROFILE_VAR("compute_ifft()",compute_ifft);
   Box domain = geom.Domain();
 
   FFT::R2C fft(geom.Domain());
@@ -288,7 +289,7 @@ inline void compute_ifft(const Geometry& geom,
 inline void generate_correlated_fluctuations(const Geometry& geom,
 				  MultiFab& hydrovs,
 				  MultiFab& noise) {
-
+  BL_PROFILE_VAR("generate_correlated_fluctuations()",generate_correlated_fluctuations);          
   // k-space noise is generated in half domain with 1D domain decomposition
   IntVect fft_size = geom.Domain().length();
   fft_size[0] = fft_size[0]/2+1;
@@ -333,6 +334,7 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
 
 // generate real-space noise for all non-conserved moments
 inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
+  BL_PROFILE_VAR("generate_fluctuations()",generate_fluctuations);
   for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
     const Array4<Real>& xi = noise.array(mfi);
@@ -388,6 +390,7 @@ void collide(int x, int y, int z,
 	     const Array4<Real>& g,
 	     const Array4<Real>& h,
        const Array4<Real>& noise) {
+  BL_PROFILE_VAR("collide()",collide);
   Array1D<Real,0,nvel> mf, mg;
 
   mf = moments(x,y,z,f);
@@ -410,6 +413,7 @@ void collide_stream(int x, int y, int z,
 		    const Array4<Real>& h,
         const Array4<Real>& noise,
 		    RandomEngine const& rng) {
+  BL_PROFILE_VAR("collide_stream()",collide_stream);
   collide(x, y, z, fOld, gOld, h, noise); // collide populations on current site
   stream_push(x, y, z, fOld, gOld, fNew, gNew); // push populations to neighbors
 }
@@ -419,6 +423,7 @@ inline void collide_stream(const Geometry& geom,
 			   MultiFab& fold, MultiFab& gold,
 			   MultiFab& fnew, MultiFab& gnew,
 			   MultiFab& hydrovs, MultiFab& noise) {
+  BL_PROFILE_VAR("collide_stream()",collide_stream);
   const int halo = 1; // need to push from first halo layer into domain
   fold.FillBoundary(geom.periodicity());
   gold.FillBoundary(geom.periodicity());
@@ -445,6 +450,7 @@ inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
 			 MultiFab& fnew, MultiFab& gnew,
 			 MultiFab& hydrovs, MultiFab& noise) {
+  BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
 #if UNCORRELATED_NOISE
     generate_fluctuations(geom, hydrovs, noise);
 #else
