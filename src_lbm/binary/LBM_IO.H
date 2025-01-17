@@ -37,7 +37,7 @@ void WriteCheckPoint(int step, MultiFab& hydrovs){
     // BL_PROFILE_VAR("WriteCheckPoint()",WriteCheckPoint);
 
     // checkpoint file name, e.g., chk0000010
-    const std::string& checkpointname = amrex::Concatenate("checkpoint_",step,10);
+    const std::string& checkpointname = amrex::Concatenate("checkpoint_",step,9);
 
     amrex::Print() << "Writing checkpoint " << checkpointname << "\n";
     BoxArray ba = hydrovs.boxArray();
@@ -169,7 +169,7 @@ void ReadCheckPoint(int& step, MultiFab& hydrovs, BoxArray& ba, DistributionMapp
 
     // checkpoint file name, e.g., chk0000010
     // const std::string& checkpointname = amrex::Concatenate(chk_base_name,restart,7);
-    const std::string& checkpointname = amrex::Concatenate("checkpoint_",step,10);
+    const std::string& checkpointname = amrex::Concatenate("checkpoint_",step,9);
 
     amrex::Print() << "Restart from checkpoint " << checkpointname << "\n";
     VisMF::IO_Buffer io_buffer(VisMF::GetIOBufferSize());

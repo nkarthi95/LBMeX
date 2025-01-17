@@ -12,6 +12,7 @@ using namespace amrex;
 #include "LBM_fluctuations.H"
 #include "LBM_tests.H"
 #include "LBM_IO.H"
+#include "LBM_analysis.H"
 
 // default grid parameters
 IntVect domain_size(16);
@@ -21,6 +22,10 @@ IntVect max_box_size(32);
 int nsteps = 10;
 int checkpoint_int = nsteps;
 int start_time = 0;
+int dump_SF = 0;
+int dump_hydro = 1;
+std::string analysis_file = "analysis.csv";
+int analysis_int = 10;
 
 inline void ReadInput() {
   ParmParse pp;
@@ -37,12 +42,16 @@ inline void ReadInput() {
   pp.query("max_grid_size_z", max_box_size[2]);
   pp.query("init_cond", init_cond);
   pp.query("droplet_radius_prop", droplet_radius_prop);
+  pp.query("analysis_file", analysis_file);
+  pp.query("analysis_int", analysis_int);
 
   /* time stepping and output parameters */
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
+  pp.query("dump_SF", dump_SF);
+  pp.query("dump_hydro", dump_hydro);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -63,9 +72,17 @@ inline void WriteOutput(int step,
   const int zero_avg = 1;
   const int nvars = 5;
   const Vector<std::string> var_names = hydrovars_names(nvars);
-  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,5);
-  WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
-  structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);
+  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
+  if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
+  if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);}
+}
+
+inline void droplet_analysis(const int step, const MultiFab& hydrovs, MultiFab& droplet, std::ofstream& outfile){
+    droplet = binarize_droplet(hydrovs, 1, 0.);
+    Real R = droplet_radius(domain_size, droplet);
+    GpuArray<Real, 3> com = center_of_mass(droplet);
+    GpuArray<Real, 3> dr = axial_radii(droplet);
+    outfile << step << "," << R << "," << com[0] << "," << com[1] << "," << com[2] << "," << dr[0] << "," << dr[1] << "," << dr[2] << std::endl; //"Timestep, Radius, dx, dy, dz\n" 
 }
 
 void main_driver(const char* argv) {
@@ -98,6 +115,10 @@ void main_driver(const char* argv) {
   MultiFab noise(ba, dm, 2*nvel, nghost);
   MultiFab test_noise(ba, dm, 2*nvel, nghost);
 
+  // droplet analysis
+  MultiFab droplet(ba, dm, 1, 0);
+  std::ofstream outfile(analysis_file);
+
   // set up StructFact
   int nStructVars = 5;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
@@ -116,9 +137,11 @@ void main_driver(const char* argv) {
       break;
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
+      outfile << "Timestep,Radius,cx,cy,cz,dx,dy,dz" << std::endl;
+      droplet_analysis(start_time, hydrovs, droplet, outfile);
       break;
     case 7:
-      checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done. 
+      checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
       break;
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
@@ -134,7 +157,6 @@ void main_driver(const char* argv) {
   // TIMESTEP
   for (int step=start_time; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
-    // structFact.FortStructure(hydrovs, geom);
     structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int ==0) {
       WriteOutput(step, geom, hydrovs, structFact);
@@ -143,14 +165,15 @@ void main_driver(const char* argv) {
     if (checkpoint_int > 0 && step%checkpoint_int ==0){
       WriteCheckPoint(step, hydrovs);
     }
+    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(step, hydrovs, droplet, outfile);}
   }
 
   Print() << "LB completed " << nsteps << " time steps" << std::endl;
 
   // Call the timer again and compute the maximum difference between the start time 
   // and stop time over all processors
+  outfile.close();
   Real stop_time = ParallelDescriptor::second() - strt_time;
   ParallelDescriptor::ReduceRealMax(stop_time);
   amrex::Print() << "Run time = " << stop_time << " s (" << domain.numPts()*nsteps/stop_time << " LUP/s)" << std::endl;
-  
 }

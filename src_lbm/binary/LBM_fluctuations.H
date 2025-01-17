@@ -14,36 +14,36 @@ AMREX_GPU_MANAGED Real temperature = 1e-7;
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void cholesky_decomp(GpuArray<Real,ndof*ndof>& A, const int n, const int bstart) {
 
-#ifdef AMREX_USE_CUDA
-  // Cholesky-Banachiewicz algorithm
-  Real sum;
-  for (int i=bstart; i<n; ++i) {
-    for (int j=bstart; j<=i; ++j) {
-      sum = A[i*n+j];
-      for (int k=j-1; k>=bstart; --k) {
-	      sum -= A[i*n+k]*A[j*n+k];
-      }
-      if (i==j) {
-	      A[i*n+j] = std::sqrt(sum);
-      } else {
-	      A[i*n+j] = sum/A[j*n+j];
+  #ifdef AMREX_USE_CUDA
+    // Cholesky-Banachiewicz algorithm
+    Real sum;
+    for (int i=bstart; i<n; ++i) {
+      for (int j=bstart; j<=i; ++j) {
+        sum = A[i*n+j];
+        for (int k=j-1; k>=bstart; --k) {
+          sum -= A[i*n+k]*A[j*n+k];
+        }
+        if (i==j) {
+          A[i*n+j] = std::sqrt(sum);
+        } else {
+          A[i*n+j] = sum/A[j*n+j];
+        }
       }
     }
-  }
-#else
-  const char uplo = 'U'; // we store the matrix in row major order (C-style)
-  const int order = n-bstart; // order of sub-matrix
-  const int lda = n; // leading dimension of entire matrix
-  const int offset = bstart*lda + bstart; // offset to sub-matrix starting at (bstart,bstart)
-  int info = 0;
-  LAPACK_dpotrf(&uplo, &order, A.data()+offset, &lda, &info);
-#endif
-  // zero out the upper triangle (lower triangle in column major order)
-  for (int i=0; i<n; i++) {
-    for (int j=0; j<i; j++) {
-      A[i+j*n] = 0.;
+  #else
+    const char uplo = 'U'; // we store the matrix in row major order (C-style)
+    const int order = n-bstart; // order of sub-matrix
+    const int lda = n; // leading dimension of entire matrix
+    const int offset = bstart*lda + bstart; // offset to sub-matrix starting at (bstart,bstart)
+    int info = 0;
+    LAPACK_dpotrf(&uplo, &order, A.data()+offset, &lda, &info);
+  #endif
+    // zero out the upper triangle (lower triangle in column major order)
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<i; j++) {
+        A[i+j*n] = 0.;
+      }
     }
-  }
 
 }
 
@@ -451,11 +451,16 @@ inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fnew, MultiFab& gnew,
 			 MultiFab& hydrovs, MultiFab& noise) {
   BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
-#if UNCORRELATED_NOISE
-    generate_fluctuations(geom, hydrovs, noise);
-#else
-    generate_correlated_fluctuations(geom, hydrovs, noise);
-#endif
+  if(temperature == 0.0){
+    noise.setVal(0.);
+  }
+  else{
+    #if UNCORRELATED_NOISE
+      generate_fluctuations(geom, hydrovs, noise);
+    #else
+      generate_correlated_fluctuations(geom, hydrovs, noise);
+    #endif
+  }
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
   hydrovars(fold, gold, hydrovs);
 }
