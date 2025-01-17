@@ -11,6 +11,7 @@ using namespace amrex;
 #include "LBM_binary.H"
 #include "LBM_fluctuations.H"
 #include "LBM_tests.H"
+#include "LBM_IO.H"
 
 // default grid parameters
 IntVect domain_size(16);
@@ -18,6 +19,8 @@ IntVect max_box_size(32);
 
 // default time stepping parameters
 int nsteps = 10;
+int checkpoint_int = nsteps;
+int start_time = 0;
 
 inline void ReadInput() {
   ParmParse pp;
@@ -38,6 +41,8 @@ inline void ReadInput() {
   /* time stepping and output parameters */
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
+  pp.query("n_checkpoint", checkpoint_int);
+  pp.query("restore_string", start_time);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -112,10 +117,14 @@ void main_driver(const char* argv) {
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
       break;
+    case 7:
+      checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done. 
+      break;
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
   }
-  if (plot_int > 0) WriteOutput(0, geom, hydrovs, structFact);
+  if (plot_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
+  if (checkpoint_int > 0) WriteCheckPoint(start_time, hydrovs); start_time++;
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
   #if AMREX_DEBUG
@@ -123,13 +132,16 @@ void main_driver(const char* argv) {
   #endif
 
   // TIMESTEP
-  for (int step=1; step <= nsteps; ++step) {
+  for (int step=start_time; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
     // structFact.FortStructure(hydrovs, geom);
     structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int ==0) {
       WriteOutput(step, geom, hydrovs, structFact);
       Print() << "LB step " << step << std::endl;
+    }
+    if (checkpoint_int > 0 && step%checkpoint_int ==0){
+      WriteCheckPoint(step, hydrovs);
     }
   }
 
