@@ -6,6 +6,7 @@
 #include <cufft.h>
 #else
 #include <lapack.h>
+#include <fftw3.h>
 #endif
 
 #include <math.h>
@@ -154,5 +155,49 @@ GpuArray<Real,3> axial_radii(MultiFab& droplet){
 
     return radii;
 } 
+
+#if 0
+// implementing 1D FFT to directly calculate height fluctuation in AMReX
+void forward_fft_1D(const GpuArray<Real>& height, GpuArray<Real>& real, GpuArray<Real>& imag, GpuArray<Real>& freqs, GpuArray<Real>& mags){
+    // inspired by https://www.fftw.org/doc/Complex-One_002dDimensional-DFTs.html and https://www.fftw.org/doc/One_002dDimensional-DFTs-of-Real-Data.html
+    
+    const int N = height.size()
+    const int FFTW_ESTIMATE;
+
+    // create data structures for doing the FFT 
+    fftw_complex *in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * N);
+    fftw_complex *out = fftw_malloc ( sizeof ( fftw_complex ) * n);
+    out = fftw_malloc ( sizeof ( fftw_complex ) * m * n );
+    
+    // Copy input data to FFTW input array
+    for (int i = 0; i < n; ++i) {
+        in[i] = height[i];
+    }
+
+    // Create FFTW plan
+    fftw_plan plan = fftw_plan_dft_r2c_1d(N, in, out, FFTW_ESTIMATE);
+    // Execute FFT plan
+    fftw_execute(plan);
+
+    // moving fftw output data to AMReX data structures for further processing
+    for (int i = 0; i < n; i++){
+        Real k = (i < (n+1)/2) ? 2.*M_PI/n*i : 2.*M_PI/n*(i-n);
+        real[i] = out[i][0];
+        imag[i] = out[i][1];
+        freqs[i] = k;
+        mags[i] = real[i]*real[i] + imag[i]*imag[i];
+    }
+
+    // Clean up
+    fftw_destroy_plan(plan); fftw_free(in); fftw_free(out);
+}
+
+void conjugate_complex(GpuArray<Real>& real, GpuArray<Real>& imag, GpuArray<Real>& mag){
+    const int N = real.size()
+    for (int i = 0; i < N; i++){
+        mag[i] = real[i]*real[i] + imag[i]*imag[i];
+    }
+}
+#endif
 
 #endif

@@ -34,7 +34,7 @@ for noise in "${noise_type[@]}"; do
   # Enters folder and executes commands before returning to parent directory
   cd "$folder"
   # Checks if run is complete and executes a run with appropriate modifications if it has not
-  if [ -e "chk_hydro_0000110000" ]; then
+  if [ -e "chk_hydro_0001000000" ]; then
     echo "Run complete"
     continue
   else
@@ -46,9 +46,9 @@ for noise in "${noise_type[@]}"; do
     #mpirun -n 8 $amrex_exec inputs_equilibration1 > equilibration1_output.txt
     #mpirun -n 8 $amrex_exec inputs_equilibration2 > equilibration2_output.txt
     #mpirun -n 8 $amrex_exec inputs_production > production_output.txt
-    ./$amrex_exec inputs_equilibration1
-    ./$amrex_exec inputs_equilibration2
-    ./$amrex_exec inputs_production
+    ./$amrex_exec inputs_equilibration1 > eq1_output.txt
+    ./$amrex_exec inputs_equilibration2 > eq2_output.txt
+    ./$amrex_exec inputs_production > prod_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
   fi
   cd ..

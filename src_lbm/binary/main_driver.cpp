@@ -14,6 +14,9 @@ using namespace amrex;
 #include "LBM_IO.H"
 #include "LBM_analysis.H"
 
+#include <fstream>
+#include <iostream>
+
 // default grid parameters
 IntVect domain_size(16);
 IntVect max_box_size(32);
@@ -24,7 +27,7 @@ int checkpoint_int = nsteps;
 int start_time = 0;
 int dump_SF = 0;
 int dump_hydro = 1;
-std::string analysis_file = "analysis.csv";
+std::string analysis_filePath = "analysis.csv";
 int analysis_int = 10;
 
 inline void ReadInput() {
@@ -42,8 +45,6 @@ inline void ReadInput() {
   pp.query("max_grid_size_z", max_box_size[2]);
   pp.query("init_cond", init_cond);
   pp.query("droplet_radius_prop", droplet_radius_prop);
-  pp.query("analysis_file", analysis_file);
-  pp.query("analysis_int", analysis_int);
 
   /* time stepping and output parameters */
   pp.query("nsteps", nsteps);
@@ -52,6 +53,8 @@ inline void ReadInput() {
   pp.query("restore_string", start_time);
   pp.query("dump_SF", dump_SF);
   pp.query("dump_hydro", dump_hydro);
+  pp.query("analysis_int", analysis_int);
+  pp.query("analysis_file", analysis_filePath);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -77,7 +80,7 @@ inline void WriteOutput(int step,
   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);}
 }
 
-inline void droplet_analysis(const int step, const MultiFab& hydrovs, MultiFab& droplet, std::ofstream& outfile){
+inline void droplet_analysis(const int step, const MultiFab& hydrovs, MultiFab& droplet, std::fstream& outfile){
     droplet = binarize_droplet(hydrovs, 1, 0.);
     Real R = droplet_radius(domain_size, droplet);
     GpuArray<Real, 3> com = center_of_mass(droplet);
@@ -117,7 +120,7 @@ void main_driver(const char* argv) {
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);
-  std::ofstream outfile(analysis_file);
+  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
 
   // set up StructFact
   int nStructVars = 5;

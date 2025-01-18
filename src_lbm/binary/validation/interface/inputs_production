@@ -1,0 +1,26 @@
+# box dimensions
+nx = 64
+ny = 2
+nz = 512
+max_grid_size_x = 64
+max_grid_size_y = 2
+max_grid_size_z = 512
+init_cond = 7
+
+# timestepping options
+nsteps = 310000
+plot_int = 50
+n_checkpoint = 10000
+restore_string = 300000
+dump_SF = 0
+dump_hydro = 1
+analysis_int = 0
+
+# model parameters
+chi = 0.5
+T = 0.23
+kappa = 0.03
+gamma = 1.0
+
+# fluctuations
+temperature = 1e-7

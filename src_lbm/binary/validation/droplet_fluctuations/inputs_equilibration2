@@ -1,30 +1,28 @@
-# box parameters
+# box dimensions
 nx = 32
 ny = 32
 nz = 32
 max_grid_size_x = 32
 max_grid_size_y = 32
 max_grid_size_z = 32
-init_cond = 10
-R = 0.3
+init_cond = 7
+droplet_radius_prop = 0.3
 
-# time parameters
+# timestepping options
 nsteps = 1000000
-n_sci_start = 0
-dump_hydro = 1
-n_hydro = 10000
-dump_SF = 0
-n_SF = 1000
+plot_int = 25000
 n_checkpoint = 100000
-start_step = 50000
-output_hdf5 = 0
+restore_string = 50000
+dump_SF = 0
+dump_hydro = 1
+analysis_int = 1000
+analysis_file = "eq2_analysis.csv"
 
 # model parameters
-lambda = 0.4
+chi = 0.4
 T = 0.19
 kappa = 0.001
 gamma = 1.0
 
-# noise parameters
+# fluctuations
 temperature = 1e-5
-correlated_noise = 0

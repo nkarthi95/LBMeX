@@ -29,7 +29,7 @@ for noise in "${noise_type[@]}"; do
     mkdir -p "$folder"
   fi
 
-  cp inputs $folder
+  cp inputs* $folder
 
   # Enters folder and executes commands before returning to parent directory
   cd "$folder"
@@ -39,10 +39,13 @@ for noise in "${noise_type[@]}"; do
     continue
   else
     echo "Executing commands in $folder"
+    ./$amrex_exec inputs_equilibration1 > eq1_output.txt
+    ./$amrex_exec inputs_equilibration2 > eq2_output.txt
+    ./$amrex_exec inputs_production > prod_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
-    replacement_text="correlated_noise = $noise"
-    sed -i "s/$search_pattern1/$replacement_text/g" inputs # edits input file with appropriate setting
-    mpirun -n 8 $amrex_exec inputs
+    #replacement_text="correlated_noise = $noise"
+    #sed -i "s/$search_pattern1/$replacement_text/g" inputs # edits input file with appropriate setting
+    #mpirun -n 8 $amrex_exec inputs
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
   fi
   cd ..
