@@ -16,7 +16,7 @@ restore_string = 0
 dump_SF = 0
 dump_hydro = 1
 analysis_int = 1000
-analysis_file = "eq1_analysis.csv"
+analysis_file = "analysis.csv"
 
 # model parameters
 chi = 0.4
