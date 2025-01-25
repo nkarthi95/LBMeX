@@ -84,23 +84,27 @@ inline void WriteOutput(int step,
 }
 
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
-  std::lock_guard<std::mutex> lock(file_mutex);
+  // std::lock_guard<std::mutex> lock(file_mutex);
+  file_mutex.lock()
   std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
   for (int i = 0; i < 8; i++){
     outfile << data_to_append(i) << ",";
   }
   outfile << "\n";
   outfile.close();
+  file_mutex.unlock()
 }
 
 inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
-  std::lock_guard<std::mutex> lock(file_mutex);
+  // std::lock_guard<std::mutex> lock(file_mutex);
+  file_mutex.lock()
   std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
   for (int i = 0; i < 8; i++){
     outfile << data_to_append[i] << ",";
   }
   outfile << "\n";
   outfile.close();
+  file_mutex.unlock()
 }
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
