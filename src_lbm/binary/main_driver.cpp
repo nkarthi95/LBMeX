@@ -14,12 +14,6 @@ using namespace amrex;
 #include "LBM_IO.H"
 #include "LBM_analysis.H"
 
-#include <fstream>
-#include <iostream>
-#include <mutex>
-
-std::mutex file_mutex;
-
 // default grid parameters
 IntVect domain_size(16);
 IntVect max_box_size(32);
@@ -30,7 +24,7 @@ int checkpoint_int = nsteps;
 int start_time = 0;
 int dump_SF = 0;
 int dump_hydro = 1;
-std::string analysis_filePath = "analysis.csv";
+std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
 
 inline void ReadInput() {
@@ -84,27 +78,18 @@ inline void WriteOutput(int step,
 }
 
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
-  // std::lock_guard<std::mutex> lock(file_mutex);
-  file_mutex.lock()
-  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
   for (int i = 0; i < 8; i++){
-    outfile << data_to_append(i) << ",";
+    AllPrintToFile(analysis_filePath) << data_to_append(i) << ",";
+    // Print() << data_to_append(i) << ",";
   }
-  outfile << "\n";
-  outfile.close();
-  file_mutex.unlock()
+  AllPrintToFile(analysis_filePath) << "\n";
 }
 
 inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
-  // std::lock_guard<std::mutex> lock(file_mutex);
-  file_mutex.lock()
-  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
   for (int i = 0; i < 8; i++){
-    outfile << data_to_append[i] << ",";
+    AllPrintToFile(analysis_filePath) << data_to_append[i] << ",";
   }
-  outfile << "\n";
-  outfile.close();
-  file_mutex.unlock()
+  AllPrintToFile(analysis_filePath) << "\n";
 }
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
