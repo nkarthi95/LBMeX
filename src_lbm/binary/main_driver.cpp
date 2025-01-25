@@ -16,6 +16,9 @@ using namespace amrex;
 
 #include <fstream>
 #include <iostream>
+#include <mutex>
+
+std::mutex file_mutex;
 
 // default grid parameters
 IntVect domain_size(16);
@@ -80,12 +83,37 @@ inline void WriteOutput(int step,
   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);}
 }
 
-inline void droplet_analysis(const int step, const MultiFab& hydrovs, MultiFab& droplet, std::fstream& outfile){
+inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
+  std::lock_guard<std::mutex> lock(file_mutex);
+  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
+  for (int i = 0; i < 8; i++){
+    outfile << data_to_append(i) << ",";
+  }
+  outfile << "\n";
+  outfile.close();
+}
+
+inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
+  std::lock_guard<std::mutex> lock(file_mutex);
+  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
+  for (int i = 0; i < 8; i++){
+    outfile << data_to_append[i] << ",";
+  }
+  outfile << "\n";
+  outfile.close();
+}
+
+inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
+    Array1D<Real, 0, 8> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
     droplet = binarize_droplet(hydrovs, 1, 0.);
     Real R = droplet_radius(domain_size, droplet);
     GpuArray<Real, 3> com = center_of_mass(droplet);
     GpuArray<Real, 3> dr = axial_radii(droplet);
-    outfile << step << "," << R << "," << com[0] << "," << com[1] << "," << com[2] << "," << dr[0] << "," << dr[1] << "," << dr[2] << std::endl; //"Timestep, Radius, dx, dy, dz\n" 
+    droplet_data(0) = step;
+    droplet_data(1) = R;
+    droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
+    droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
+    write_csv(analysis_filePath, droplet_data);
 }
 
 void main_driver(const char* argv) {
@@ -120,7 +148,8 @@ void main_driver(const char* argv) {
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);
-  std::fstream outfile(analysis_filePath, std::ios::out | std::ios::app);
+  std::vector<std::string> col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
+  write_csv(analysis_filePath, col_headers);
 
   // set up StructFact
   int nStructVars = 5;
@@ -140,8 +169,7 @@ void main_driver(const char* argv) {
       break;
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
-      outfile << "Timestep,Radius,cx,cy,cz,dx,dy,dz" << std::endl;
-      droplet_analysis(start_time, hydrovs, droplet, outfile);
+      droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
@@ -168,14 +196,13 @@ void main_driver(const char* argv) {
     if (checkpoint_int > 0 && step%checkpoint_int ==0){
       WriteCheckPoint(step, hydrovs);
     }
-    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(step, hydrovs, droplet, outfile);}
+    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(analysis_filePath, step, hydrovs, droplet);}
   }
 
   Print() << "LB completed " << nsteps << " time steps" << std::endl;
 
   // Call the timer again and compute the maximum difference between the start time 
   // and stop time over all processors
-  outfile.close();
   Real stop_time = ParallelDescriptor::second() - strt_time;
   ParallelDescriptor::ReduceRealMax(stop_time);
   amrex::Print() << "Run time = " << stop_time << " s (" << domain.numPts()*nsteps/stop_time << " LUP/s)" << std::endl;
