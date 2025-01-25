@@ -26,6 +26,7 @@ int dump_SF = 0;
 int dump_hydro = 1;
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
+std::vector<std::string> col_headers;
 
 inline void ReadInput() {
   ParmParse pp;
@@ -79,17 +80,17 @@ inline void WriteOutput(int step,
 
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
   for (int i = 0; i < 8; i++){
-    AllPrintToFile(analysis_filePath) << data_to_append(i) << ",";
+    PrintToFile(analysis_filePath, 0) << data_to_append(i) << ",";
     // Print() << data_to_append(i) << ",";
   }
-  AllPrintToFile(analysis_filePath) << "\n";
+  PrintToFile(analysis_filePath, 0) << "\n";
 }
 
 inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
   for (int i = 0; i < 8; i++){
-    AllPrintToFile(analysis_filePath) << data_to_append[i] << ",";
+    PrintToFile(analysis_filePath, 0) << data_to_append[i] << ",";
   }
-  AllPrintToFile(analysis_filePath) << "\n";
+  PrintToFile(analysis_filePath, 0) << "\n";
 }
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
@@ -137,8 +138,6 @@ void main_driver(const char* argv) {
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);
-  std::vector<std::string> col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
-  write_csv(analysis_filePath, col_headers);
 
   // set up StructFact
   int nStructVars = 5;
@@ -158,6 +157,8 @@ void main_driver(const char* argv) {
       break;
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
+      col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
+      write_csv(analysis_filePath, col_headers);
       droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
       break;
     case 7:
