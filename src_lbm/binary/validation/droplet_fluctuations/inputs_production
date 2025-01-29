@@ -1,28 +1,28 @@
 # box dimensions
-nx = 32
-ny = 32
-nz = 32
+nx = 64
+ny = 64
+nz = 64
 max_grid_size_x = 32
 max_grid_size_y = 32
 max_grid_size_z = 32
-init_cond = 7
-droplet_radius_prop = 0.3
+init_cond = 2
+droplet_radius_prop = 0.35
 
 # timestepping options
-nsteps = 1050000
-plot_int = 100
+nsteps = 200000
+plot_int = 1000
 n_checkpoint = 50000
-restore_string = 1000000
+restore_string = 0
 dump_SF = 0
 dump_hydro = 1
-analysis_int = 1
+analysis_int = 10
 analysis_file = "analysis.csv"
 
 # model parameters
-chi = 0.4
-T = 0.19
-kappa = 0.001
+chi = 0.7
+T = 0.3
+kappa = 0.01
 gamma = 1.0
 
 # fluctuations
-temperature = 1e-5
+temperature = 1e-6

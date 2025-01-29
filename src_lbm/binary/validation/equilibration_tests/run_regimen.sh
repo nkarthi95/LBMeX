@@ -1,10 +1,7 @@
 #!/bin/bash
 
-amrex_exec="../../../main3d.gnu.TPROF.MPI.ex"
-
-# Defines the radius of the droplet as a proportion of system size. 0.5 is maximum
-noise_type=("0")
-
+# Defines whether to use the uncorrelated (0) or correlated noise (1)
+noise_type=("0" "1")
 # Define the base folder name
 base_folder="spatially_"
 
@@ -18,6 +15,7 @@ for noise in "${noise_type[@]}"; do
   fi
 
   folder="${base_folder}${suffix}"
+  amrex_exec="../../../${folder}/main3d.gnu.MPI.ex" #setup from the perspective of the folder it is run in
 
   echo "Processing folder: $folder"
   
@@ -27,20 +25,18 @@ for noise in "${noise_type[@]}"; do
     mkdir -p "$folder"
   fi
 
-  cp inputs_equilibration1 $folder
-  cp inputs_production $folder
+  cp inputs* $folder
 
   # Enters folder and executes commands before returning to parent directory
   cd "$folder"
   # Checks if run is complete and executes a run with appropriate modifications if it has not
-  if [ -e "chk_hydro_000550000" ]; then
+  if [ -e "chk_hydro_0000200000" ]; then
     echo "Run complete"
     continue
   else
     echo "Executing commands in $folder"
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
-    ./$amrex_exec inputs_equilibration1 > output_eq1.txt
-    ./$amrex_exec inputs_production > output_prod.txt
+    mpirun -n 8 $amrex_exec inputs_production > run_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
   fi
   cd ..

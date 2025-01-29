@@ -1,14 +1,9 @@
 #!/bin/bash
 
-amrex_exec="../../../main3d.gnu.TPROF.MPI.ex"
-
-# Defines the radius of the droplet as a proportion of system size. 0.5 is maximum
-#noise_type=("0" "1")
+# Defines whether to use the uncorrelated (0) or correlated noise (1)
 noise_type=("0")
-
 # Define the base folder name
 base_folder="spatially_"
-search_pattern1="correlated_noise = 0"
 
 # Loop through each radius in R
 for noise in "${noise_type[@]}"; do
@@ -20,6 +15,7 @@ for noise in "${noise_type[@]}"; do
   fi
 
   folder="${base_folder}${suffix}"
+  amrex_exec="../../../${folder}/main3d.gnu.MPI.ex" #setup from the perspective of the folder it is run in
 
   echo "Processing folder: $folder"
   
@@ -34,18 +30,13 @@ for noise in "${noise_type[@]}"; do
   # Enters folder and executes commands before returning to parent directory
   cd "$folder"
   # Checks if run is complete and executes a run with appropriate modifications if it has not
-  if [ -e "chk_hydro_0000050000" ]; then
+  if [ -e "chk_hydro_0000300000" ]; then
     echo "Run complete"
     continue
   else
     echo "Executing commands in $folder"
-    ./$amrex_exec inputs_equilibration1 > eq1_output.txt
-    ./$amrex_exec inputs_equilibration2 > eq2_output.txt
-    ./$amrex_exec inputs_production > prod_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
-    #replacement_text="correlated_noise = $noise"
-    #sed -i "s/$search_pattern1/$replacement_text/g" inputs # edits input file with appropriate setting
-    #mpirun -n 8 $amrex_exec inputs
+    mpirun -n 8 $amrex_exec inputs_production > run_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
   fi
   cd ..
