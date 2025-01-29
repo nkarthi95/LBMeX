@@ -151,12 +151,15 @@ void main_driver(const char* argv) {
   switch(init_cond){
     case 0:
       LBM_init_mixture(fold, gold, hydrovs);
+      start_time = 0;
       break;
     case 1:
       LBM_init_flat_interface(geom, fold, gold, hydrovs);
+      start_time = 0;
       break;
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
+      start_time = 0;
       col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
       write_csv(analysis_filePath, col_headers);
       droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
