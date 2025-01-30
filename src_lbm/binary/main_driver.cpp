@@ -62,7 +62,8 @@ inline void ReadInput() {
 
   /* noise parameters */
   pp.query("temperature", temperature);
-
+  // pp.dumpTable()
+  pp.dumpTable(amrex::OutStream(), true);
 }
 
 inline void WriteOutput(int step,
@@ -81,7 +82,6 @@ inline void WriteOutput(int step,
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
   for (int i = 0; i < 8; i++){
     PrintToFile(analysis_filePath, 0) << data_to_append(i) << ",";
-    // Print() << data_to_append(i) << ",";
   }
   PrintToFile(analysis_filePath, 0) << "\n";
 }
