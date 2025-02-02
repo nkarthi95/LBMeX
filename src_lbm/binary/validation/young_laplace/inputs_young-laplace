@@ -21,7 +21,7 @@ analysis_file = "analysis.csv"
 # model parameters
 chi = 0.7
 T = 0.3
-kappa = 0.03
+kappa = 0.01
 gamma = 1.0
 
 # fluctuations
