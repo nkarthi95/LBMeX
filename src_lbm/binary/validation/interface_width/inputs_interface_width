@@ -1,17 +1,17 @@
 # box dimensions
 nx = 32
-ny = 32
+ny = 8
 nz = 32
 max_grid_size_x = 16
-max_grid_size_y = 16
+max_grid_size_y = 8
 max_grid_size_z = 16
-init_cond = 2
+init_cond = 1
 droplet_radius_prop = 0.3
 
 # timestepping options
-nsteps = 75000
-plot_int = 5000
-n_checkpoint = 25000
+nsteps = 20000
+plot_int = 20000
+n_checkpoint = 20000
 restore_string = 0
 dump_SF = 0
 dump_hydro = 1

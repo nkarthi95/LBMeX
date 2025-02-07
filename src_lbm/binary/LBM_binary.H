@@ -440,13 +440,35 @@ inline void LBM_init_mixture(MultiFab& mf,
   hydrovars(mf, mg, hydrovs);
 }
 
+inline Real get_phi0(Real chi, Real T){
+  const Real ratio = chi/T;
+  Real phi0 = 0.0;
+  if(ratio <= 2.27){
+    phi0 = sqrt(3. - 6./ratio);}
+  else if (ratio <= 4.152){
+    phi0 = -0.133*pow(ratio, 2.) + 1.030*ratio - 1.039;}
+  else{
+    phi0 = 0.0248*ratio + 0.863;}
+
+  if(phi0 > 1){phi0 = 0.99;}
+  return phi0;
+}
+
+inline Real get_xi(Real c1, Real chi, Real T, Real kappa){
+  const Real ratio = chi/T;
+  const Real term1 = 2.*sqrt(kappa/ratio);
+  const Real term2 = sqrt(-1. - (2.*log(4.*c1*(1-c1)))/(ratio*pow(1. - 2.*c1, 2)));
+  return term1/term2;
+}
+
 // flat interface between C1 and C2
 inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mf,
 				    MultiFab& mg,
 				    MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
-  const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
+  const Real phi0 = get_phi0(chi, T);
+  const Real xi = get_xi((phi0+1.)/2., chi, T, kappa);
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -454,28 +476,19 @@ inline void LBM_init_flat_interface(const Geometry& geom,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-#if (AMREX_SPACEDIM == 2)
-    const Real r2 = rx*rx+ry*ry;
-#elif (AMREX_SPACEDIM == 3)
-    const Real rz = z-box[0]/2;
-    const Real r2 = rx*rx+ry*ry+rz*rz;
-#endif
-
-    const Real rho=1.0;
-    Real phi;
-
-    if (rx < 0.) {
-      phi = phi0;
-    } else {
-      phi = -phi0;
-    }
-
-    for (int i=0; i<nvel; i++) {
-      f[nbx](x,y,z,i) = w[i]*rho;
-      g[nbx](x,y,z,i) = w[i]*phi;
-    }
-
-  });
+    #if (AMREX_SPACEDIM == 2)
+        const Real r2 = rx*rx+ry*ry;
+    #elif (AMREX_SPACEDIM == 3)
+        const Real rz = z-box[0]/2;
+        const Real r2 = rx*rx+ry*ry+rz*rz;
+    #endif
+        const Real rho=1.0;
+        Real phi = phi0*tanh((rx+0.5)/(sqrt(2.)*xi));
+        for (int i=0; i<nvel; i++) {
+          f[nbx](x,y,z,i) = w[i]*rho;
+          g[nbx](x,y,z,i) = w[i]*phi;
+        }
+      });
   hydrovars(mf, mg, hydrovs);
 }
 
@@ -487,7 +500,9 @@ inline void LBM_init_droplet(const Real r,
 			     MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
   const Real R = r*box[0];
-  const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
+  // const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
+  const Real phi0 = get_phi0(chi, T);
+  const Real xi = get_xi((phi0+1.)/2., chi, T, kappa);
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -495,23 +510,24 @@ inline void LBM_init_droplet(const Real r,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-#if (AMREX_SPACEDIM == 2)
-    const Real r2 = rx*rx+ry*ry;
-#elif (AMREX_SPACEDIM == 3)
-    const Real rz = z-box[0]/2;
-    const Real r2 = rx*rx+ry*ry+rz*rz;
-#endif
-    const Real r = sqrt(r2);
+    #if (AMREX_SPACEDIM == 2)
+        const Real r2 = rx*rx+ry*ry;
+    #elif (AMREX_SPACEDIM == 3)
+        const Real rz = z-box[0]/2;
+        const Real r2 = rx*rx+ry*ry+rz*rz;
+    #endif
+        const Real r = sqrt(r2);
 
-    const Real rho = 1.0;
-    const Real phi = phi0*tanh((R-r)/sqrt(kappa));
+        const Real rho = 1.0;
+        // const Real phi = phi0*tanh((R-r)/sqrt(kappa));
+        const Real phi = phi0*tanh((R-r)/(sqrt(2.)*xi));
 
-    for (int i=0; i<nvel; i++) {
-      f[nbx](x,y,z,i) = w[i]*rho;
-      g[nbx](x,y,z,i) = w[i]*phi;
-    }
+        for (int i=0; i<nvel; i++) {
+          f[nbx](x,y,z,i) = w[i]*rho;
+          g[nbx](x,y,z,i) = w[i]*phi;
+        }
 
-  });
+      });
   hydrovars(mf, mg, hydrovs);
 }
 
