@@ -17,9 +17,9 @@ dump_hydro = 1000
 analysis_int = 0
 
 # model parameters
-chi = 0.5
-T = 0.23
-kappa = 0.03
+chi = 0.418
+T = 0.2
+kappa = 0.01
 gamma = 1.0
 
 # fluctuations

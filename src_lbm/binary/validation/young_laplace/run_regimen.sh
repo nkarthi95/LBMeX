@@ -5,7 +5,7 @@ amrex_exec="../../../../../spatially_independent/main3d.gnu.MPI.ex"
 
 # Defines the radius of the droplet as a proportion of system size. 0.5 is maximum
 droplet_radii=("0.30" "0.35" "0.40")
-chi_s=("2.25" "2.5" "2.75" "3" "3.25" "3.5" "3.75" "4" "4.25" "4.5" "4.75" "5")
+chi_s=("2.15" "2.25" "2.5" "2.75" "3" "3.25")# "3.5" "3.75" "4" "4.25" "4.5" "4.75" "5")
 T="0.2"
 kappa="0.03"
 
