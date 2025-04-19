@@ -9,20 +9,20 @@ init_cond = 2
 droplet_radius_prop = 0.35
 
 # timestepping options
-nsteps = 200000
+nsteps = 1000000
 plot_int = 1000
 n_checkpoint = 50000
 restore_string = 0
 dump_SF = 0
 dump_hydro = 1
-analysis_int = 10
+analysis_int = 0
 analysis_file = "analysis.csv"
 
 # model parameters
-chi = 0.7
-T = 0.3
+chi = 1.1
+T = 0.526
 kappa = 0.01
 gamma = 1.0
 
 # fluctuations
-temperature = 1e-6
+temperature = 1e-7
