@@ -24,6 +24,7 @@ int checkpoint_int = nsteps;
 int start_time = 0;
 int dump_SF = 0;
 int dump_hydro = 1;
+int dump_start = 0;
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
 std::vector<std::string> col_headers;
@@ -43,12 +44,14 @@ inline void ReadInput() {
   pp.query("max_grid_size_z", max_box_size[2]);
   pp.query("init_cond", init_cond);
   pp.query("droplet_radius_prop", droplet_radius_prop);
+  pp.query("C1", C1);
 
   /* time stepping and output parameters */
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
+  pp.query("dump_start", dump_start);
   pp.query("dump_SF", dump_SF);
   pp.query("dump_hydro", dump_hydro);
   pp.query("analysis_int", analysis_int);
@@ -72,11 +75,11 @@ inline void WriteOutput(int step,
       StructFact& structFact) {
   // set up variable names for output
   const int zero_avg = 1;
-  const int nvars = 5;
+  const int nvars = 11;
   const Vector<std::string> var_names = hydrovars_names(nvars);
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
-  if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), geom, "SF_plt", zero_avg);}
+  if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
 }
 
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
@@ -182,7 +185,7 @@ void main_driver(const char* argv) {
   for (int step=start_time; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
     structFact.FortStructure(hydrovs);
-    if (plot_int > 0 && step%plot_int ==0) {
+    if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
       WriteOutput(step, geom, hydrovs, structFact);
       Print() << "LB step " << step << std::endl;
     }

@@ -78,11 +78,11 @@ GpuArray<Real,ndof*ndof> noise_covariance_matrix(const Real rho0, const Real phi
   const Real lambdaLB_r = -1./tau_r;
   const Real lambdaLB_p = -1./tau_p;
 
-  // TODO: needs check!
-  const Real lambda_r = -lambdaLB_r*(2+lambdaLB_r)/2;
-  const Real lambda_p = -lambdaLB_p*(2+lambdaLB_p)/2;
-  const Real lambda_rp = -lambdaLB_r*(2+lambdaLB_p)/2;
-  const Real lambda_pr = -lambdaLB_p*(2+lambdaLB_r)/2;
+  // // TODO: needs check!
+  const Real lambda_r = -lambdaLB_r*(2.+lambdaLB_r)/2.;
+  const Real lambda_p = -lambdaLB_p*(2.+lambdaLB_p)/2.;
+  const Real lambda_rp = -lambdaLB_r*(2.+lambdaLB_p)/2.;
+  const Real lambda_pr = -lambdaLB_p*(2.+lambdaLB_r)/2.;
 
   // f = T/2*(rho+phi)*log((rho+phi)/2) + T/2*(rho-phi)*log((rho-phi)/2) - T*rho + chi/4*(rho**2-phi**2)/rho + kappa*(Drho**2+Dphi**2)
   // p = rho*T - kappa*(rho*D2rho+phi*D2phi)
@@ -374,8 +374,8 @@ void thermalize_moments(int x, int y, int z,
       Array1D<Real,0,nvel>& mf, Array1D<Real,0,nvel>& mg,
       const Array4<Real>& noise) {
   // diffusive moments 1,2,3 in noise at 5,6,7
-  for (int i=1; i<=AMREX_SPACEDIM; ++i) {
-    mg(i) += noise(x,y,z,i+1+AMREX_SPACEDIM);
+  for (int i=1; i<=AMREX_SPACEDIM; ++i){
+    mg(i) += noise(x,y,z,i+1+AMREX_SPACEDIM)
   }
   // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
   for (int i=1+AMREX_SPACEDIM; i<nvel; ++i) {

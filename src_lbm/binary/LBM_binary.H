@@ -8,7 +8,6 @@ const int ndof = 2*nvel; // number of degrees of freedom
 
 AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
 AMREX_GPU_MANAGED Real tau_p = 1.0;
-
 AMREX_GPU_MANAGED Real chi = 0.4;
 AMREX_GPU_MANAGED Real T = 0.25;
 
@@ -18,6 +17,31 @@ AMREX_GPU_MANAGED Real Gamma = 1.0;
 
 AMREX_GPU_MANAGED int init_cond = 0;
 AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
+
+AMREX_GPU_MANAGED Real C1 = 0.5;
+
+// thermodynamic model coexistence phi0
+inline Real get_phi0(Real chi, Real T){
+  const Real ratio = chi/T;
+  Real phi0 = 0.0;
+  if(ratio <= 2.27){
+    phi0 = sqrt(3. - 6./ratio);}
+  else if (ratio <= 4.152){
+    phi0 = -0.133*pow(ratio, 2.) + 1.030*ratio - 1.039;}
+  else{
+    phi0 = 0.0248*ratio + 0.863;}
+
+  if(phi0 > 1){phi0 = 0.99;}
+  return phi0;
+}
+
+// thermodynamic model interface width
+inline Real get_xi(Real c1, Real chi, Real T, Real kappa){
+  const Real ratio = chi/T;
+  const Real term1 = 2.*sqrt(kappa/ratio);
+  const Real term2 = sqrt(-1. - (2.*log(4.*c1*(1-c1)))/(ratio*pow(1. - 2.*c1, 2)));
+  return term1/term2;
+}
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -55,11 +79,11 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
   const Real D2phi = laplacians(1);
 
   Array1D<Real,0,2> mu = { 0.0, 0.0 } ;
-#if 0
+  #if 0
   /* mu_rho is not needed for the calculations.
      The following expression has not been tested. */
   mu(0) = chi/4.*(1.+phi2/rho2) + T/2*log((rho2-phi2)/4) - kappa*D2rho;
-#endif
+  #endif
 
   mu(1) = // Eq. (38) in Swift et al.
     - chi/2.*phi/rho + T/2*log((rho+phi)/(rho-phi)) - kappa*D2phi;
@@ -133,6 +157,7 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
 			      const Array1D<RealVect,0,2>& gradients,
 			      const Array1D<Real,0,2>& laplacians,
+            const Array1D<Real,0,2>& mu,
 			      const RealVect& u) {
   Array1D<Real,0,nvel> mEq;
 
@@ -143,7 +168,7 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   const RealVect Dphi = gradients(1);
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
-  const Real pbulk = pressure(rho, phi);
+  const Real pbulk = pressure(rho, phi) + phi*mu(1); // Equation 15 in 10.1103/PhysRevE.59.4366 mentions that the osmotic pressure is ommitted in the original 1996 swift et al. paper
 
   Real G[3][3], traceG=0.; // Eq. (39) in Swift et al.
   G[0][0] = kappa*Drho[0]*Drho[0] + kappa*Dphi[0]*Dphi[0]; traceG  = G[0][0];
@@ -271,7 +296,7 @@ void relax_moments(int x, int y, int z,
   const Array1D<Real,0,2> mu = chemical_potentials(fields, gradients, laplacians);
 
   Array1D<Real,0,nvel> mfEq, mgEq;
-  mfEq = fequilibrium_moments(fields, gradients, laplacians, u);
+  mfEq = fequilibrium_moments(fields, gradients, laplacians, mu, u);
   mgEq = gequilibrium_moments(fields, mu, u);
 
   for (int i=0; i<nvel; ++i) {
@@ -422,8 +447,8 @@ inline void LBM_timestep(const Geometry& geom,
 inline void LBM_init_mixture(MultiFab& mf,
 			     MultiFab& mg,
 			     MultiFab& hydrovs) {
-  const Real C1 = 0.5;
-  const Real C2 = 0.5;
+  // const Real C1 = 0.5;
+  const Real C2 = 1.0 - C1;
   for (MFIter mfi(mf); mfi.isValid(); ++mfi) {
     const Box& valid_box = mfi.validbox();
     const Array4<Real>& f = mf.array(mfi);
@@ -433,32 +458,11 @@ inline void LBM_init_mixture(MultiFab& mf,
       const Real phi = (C1-C2);
       for (int i=0; i<nvel; i++) {
         f(x,y,z,i) = w[i]*rho;
-        g(x,y,z,i) = w[i]*phi;
+        g(x,y,z,i) = w[i]*phi+RandomNormal(0., 0.0001, engine);
       }
     });
   }
   hydrovars(mf, mg, hydrovs);
-}
-
-inline Real get_phi0(Real chi, Real T){
-  const Real ratio = chi/T;
-  Real phi0 = 0.0;
-  if(ratio <= 2.27){
-    phi0 = sqrt(3. - 6./ratio);}
-  else if (ratio <= 4.152){
-    phi0 = -0.133*pow(ratio, 2.) + 1.030*ratio - 1.039;}
-  else{
-    phi0 = 0.0248*ratio + 0.863;}
-
-  if(phi0 > 1){phi0 = 0.99;}
-  return phi0;
-}
-
-inline Real get_xi(Real c1, Real chi, Real T, Real kappa){
-  const Real ratio = chi/T;
-  const Real term1 = 2.*sqrt(kappa/ratio);
-  const Real term2 = sqrt(-1. - (2.*log(4.*c1*(1-c1)))/(ratio*pow(1. - 2.*c1, 2)));
-  return term1/term2;
 }
 
 // flat interface between C1 and C2
