@@ -51,6 +51,7 @@ inline void ReadInput() {
   pp.query("plot_int", plot_int);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
+  pp.query("fluctuation_start", fluctuation_start);
   pp.query("dump_start", dump_start);
   pp.query("dump_SF", dump_SF);
   pp.query("dump_hydro", dump_hydro);
@@ -75,7 +76,7 @@ inline void WriteOutput(int step,
       StructFact& structFact) {
   // set up variable names for output
   const int zero_avg = 1;
-  const int nvars = 11;
+  const int nvars = 5;
   const Vector<std::string> var_names = hydrovars_names(nvars);
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
@@ -138,6 +139,7 @@ void main_driver(const char* argv) {
   MultiFab hydrovs(ba, dm, 2*nvel, nghost);
   MultiFab noise(ba, dm, 2*nvel, nghost);
   MultiFab test_noise(ba, dm, 2*nvel, nghost);
+  MultiFab reference(ba, dm, 2, nghost);
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);
@@ -183,7 +185,7 @@ void main_driver(const char* argv) {
 
   // TIMESTEP
   for (int step=start_time; step <= nsteps; ++step) {
-    LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise);
+    LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
     structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
       WriteOutput(step, geom, hydrovs, structFact);

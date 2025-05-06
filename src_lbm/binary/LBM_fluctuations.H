@@ -375,7 +375,7 @@ void thermalize_moments(int x, int y, int z,
       const Array4<Real>& noise) {
   // diffusive moments 1,2,3 in noise at 5,6,7
   for (int i=1; i<=AMREX_SPACEDIM; ++i){
-    mg(i) += noise(x,y,z,i+1+AMREX_SPACEDIM)
+    mg(i) += noise(x,y,z,i+1+AMREX_SPACEDIM);
   }
   // nonconserved moments 4..18 in noise at 8..22 (f) and 23..37 (g)
   for (int i=1+AMREX_SPACEDIM; i<nvel; ++i) {
@@ -449,16 +449,22 @@ inline void collide_stream(const Geometry& geom,
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
 			 MultiFab& fnew, MultiFab& gnew,
-			 MultiFab& hydrovs, MultiFab& noise) {
+			 MultiFab& hydrovs, MultiFab& noise, 
+       MultiFab& reference, int curr_step) {
   BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
-  if(temperature == 0.0){
+  if(temperature == 0.0 or curr_step < fluctuation_start){
     noise.setVal(0.);
+    // MultiFab reference(ba, dm, 2, nghost);
+    reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
+    // Print() << "equilibration";
+    // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
   }
   else{
     #if UNCORRELATED_NOISE
-      generate_fluctuations(geom, hydrovs, noise);
+      // generate_fluctuations(geom, hydrovs, noise);
+      generate_fluctuations(geom, reference, noise);
     #else
-      generate_correlated_fluctuations(geom, hydrovs, noise);
+      generate_correlated_fluctuations(geom, reference, noise);
     #endif
   }
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);

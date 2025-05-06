@@ -17,6 +17,7 @@ AMREX_GPU_MANAGED Real Gamma = 1.0;
 
 AMREX_GPU_MANAGED int init_cond = 0;
 AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
+AMREX_GPU_MANAGED int fluctuation_start = 0;
 
 AMREX_GPU_MANAGED Real C1 = 0.5;
 
