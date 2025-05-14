@@ -366,7 +366,7 @@ bool equilibrium_test(int x, int y, int z, const Array4<Real>& h) {
     const Array1D<Real,0,2> mu = chemical_potentials(fields, gradients, laplacians);
 
     Array1D<Real,0,nvel> f = fequilibrium(fields, gradients, laplacians, u);
-    Array1D<Real,0,nvel> mf = fequilibrium_moments(fields, gradients, laplacians, mu, u);
+    Array1D<Real,0,nvel> mf = fequilibrium_moments(fields, gradients, laplacians, u);
     Array1D<Real,0,nvel> g = gequilibrium(fields(1), mu(1), u);
     Array1D<Real,0,nvel> mg = gequilibrium_moments(fields, mu, u);
 

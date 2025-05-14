@@ -140,6 +140,7 @@ void main_driver(const char* argv) {
   MultiFab noise(ba, dm, 2*nvel, nghost);
   MultiFab test_noise(ba, dm, 2*nvel, nghost);
   MultiFab reference(ba, dm, 2, nghost);
+  reference.setVal(1.0, 0, 1, nghost); // set reference density to a constant value rho = 1.0
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);

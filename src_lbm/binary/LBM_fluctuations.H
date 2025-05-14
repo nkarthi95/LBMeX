@@ -445,6 +445,52 @@ inline void collide_stream(const Geometry& geom,
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
 }
 
+// def replace_bulk_with_theoretical_interface(data, rho_liquid, rho_vapor, w):
+//     """
+//     Replace bulk values with coexistence densities, preserving a known interface width.
+
+//     Parameters:
+//         data: np.ndarray - original 3D array
+//         rho_liquid: float - coexistence density inside droplet
+//         rho_vapor: float - coexistence density outside droplet
+//         w: float - theoretical interface width in voxel units
+//     """
+//     rho_mid = 0.5 * (rho_liquid + rho_vapor)
+//     drho = abs(rho_liquid - rho_vapor)
+    
+//     # Define interfacial band as +/- half interface width
+//     interface_min = rho_mid - 0.5*drho*np.tanh(np.sqrt(2)/w)  # optional: adjust based on tanh profile
+//     interface_max = rho_mid + 0.5*drho*np.tanh(np.sqrt(2)/w)
+
+//     result = data.copy()
+    
+//     # Assign coexistence densities outside the interfacial region
+//     result[data < interface_min] = min(rho_liquid, rho_vapor)
+//     result[data > interface_max] = max(rho_liquid, rho_vapor)
+    
+//     # Interface remains unchanged
+//     return result
+
+inline void replace_reference(MultiFab& reference){
+  const Real C1 = 1. - get_phi0(chi, T);
+  const Real C2 = 1. - C1;
+  const Real drho = C1 - C2;
+  
+  const Real xi = get_xi(C1, chi, T, kappa);
+  const Real interface_min = 0.5 - 0.5*drho*tanh(sqrt(2.)/xi);
+  const Real interface_max = 0.5 + 0.5*drho*tanh(sqrt(2.)/xi);
+
+  for (MFIter mfi(reference); mfi.isValid(); ++mfi) {
+    const Array4<Real>& ref = reference.array(mfi);
+    const Box& valid_box = mfi.growntilebox(2);
+    ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {\
+      Real curr_C1 = (ref(x,y,z,0) + ref(x,y,z,1))/2;
+      if (curr_C1 < interface_min){ref(x,y,z,1) = 2.*C2 - 1.;}
+      else if (curr_C1 > interface_max){ref(x,y,z,1) = 2.*C1 - 1;}
+      });
+  }
+}
+
 // LB timestep for whole lattice
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
@@ -456,15 +502,17 @@ inline void LBM_timestep(const Geometry& geom,
     noise.setVal(0.);
     // MultiFab reference(ba, dm, 2, nghost);
     reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
+    // replace_reference(reference);
     // Print() << "equilibration";
     // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
   }
-  else{
+  else{    
     #if UNCORRELATED_NOISE
-      // generate_fluctuations(geom, hydrovs, noise);
-      generate_fluctuations(geom, reference, noise);
+      generate_fluctuations(geom, hydrovs, noise);
+      // generate_fluctuations(geom, reference, noise);
     #else
-      generate_correlated_fluctuations(geom, reference, noise);
+      generate_correlated_fluctuations(geom, hydrovs, noise);
+      // generate_correlated_fluctuations(geom, reference, noise);
     #endif
   }
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);

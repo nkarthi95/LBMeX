@@ -158,7 +158,6 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
 			      const Array1D<RealVect,0,2>& gradients,
 			      const Array1D<Real,0,2>& laplacians,
-            const Array1D<Real,0,2>& mu,
 			      const RealVect& u) {
   Array1D<Real,0,nvel> mEq;
 
@@ -169,7 +168,7 @@ Array1D<Real,0,nvel> fequilibrium_moments(const Array1D<Real,0,2>& fields,
   const RealVect Dphi = gradients(1);
   const Real D2rho = laplacians(0);
   const Real D2phi = laplacians(1);
-  const Real pbulk = pressure(rho, phi) + phi*mu(1); // Equation 15 in 10.1103/PhysRevE.59.4366 mentions that the osmotic pressure is ommitted in the original 1996 swift et al. paper
+  const Real pbulk = pressure(rho, phi);// + phi*mu(1); // Equation 15 in 10.1103/PhysRevE.59.4366 mentions that the osmotic pressure is ommitted in the original 1996 swift et al. paper
 
   Real G[3][3], traceG=0.; // Eq. (39) in Swift et al.
   G[0][0] = kappa*Drho[0]*Drho[0] + kappa*Dphi[0]*Dphi[0]; traceG  = G[0][0];
@@ -297,7 +296,7 @@ void relax_moments(int x, int y, int z,
   const Array1D<Real,0,2> mu = chemical_potentials(fields, gradients, laplacians);
 
   Array1D<Real,0,nvel> mfEq, mgEq;
-  mfEq = fequilibrium_moments(fields, gradients, laplacians, mu, u);
+  mfEq = fequilibrium_moments(fields, gradients, laplacians, u);
   mgEq = gequilibrium_moments(fields, mu, u);
 
   for (int i=0; i<nvel; ++i) {
