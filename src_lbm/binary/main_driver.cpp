@@ -76,7 +76,7 @@ inline void WriteOutput(int step,
       StructFact& structFact) {
   // set up variable names for output
   const int zero_avg = 1;
-  const int nvars = 5;
+  const int nvars = 14;
   const Vector<std::string> var_names = hydrovars_names(nvars);
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
@@ -172,6 +172,7 @@ void main_driver(const char* argv) {
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
+      reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
       break;
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
