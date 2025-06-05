@@ -27,9 +27,14 @@ MultiFab binarize_droplet(const MultiFab& hydrovars, int comp = 1, Real cutoff =
     return droplet;
 }
 
-Real droplet_radius(const IntVect domain_size, MultiFab& droplet){
-    int nx, ny, nz;
-    nx = domain_size[0]; ny = domain_size[1], nz = domain_size[2];
+Real droplet_radius(MultiFab& droplet){
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
+
+    Box domain_box = ba.minimalBox();
+    const IntVect domain_size2 = domain_box.size();
+    const int nx = domain_size2[0]; const int ny = domain_size2[1]; const int nz = domain_size2[2];
+
     IntVect slc_lo, slc_hi;
     Real R = 0.; Real mass = 0.;
     Real rhod = 0.; Real rhom = 0.;
@@ -47,8 +52,6 @@ Real droplet_radius(const IntVect domain_size, MultiFab& droplet){
     // Print() << "rhod: " << rhod << "\n";
     // Print() << "rhom: " << rhom << "\n";
 
-    BoxArray ba = droplet.boxArray();
-    DistributionMapping dm = droplet.DistributionMap();
     MultiFab mass_onegrid(ba, dm, 1, 0); // ghost cells is 0
     mass_onegrid.ParallelCopy(droplet, 0, 0, 1);
 
