@@ -99,8 +99,12 @@ inline void write_csv(const std::string analysis_filePath, std::vector<std::stri
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
     Array1D<Real, 0, 8> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
-    droplet = binarize_droplet(hydrovs, 1, 0.);
-    Real R = droplet_radius(domain_size, droplet);
+    // droplet = binarize_droplet(hydrovs, 1, 0.);
+    droplet.ParallelCopy(hydrovs, 1, 0, 1);
+    
+    // Real R = droplet_radius(domain_size, droplet);
+    Real R = droplet_radius_profile_fit(droplet);
+    Print() << R << "\n";
     GpuArray<Real, 3> com = center_of_mass(droplet);
     GpuArray<Real, 3> dr = axial_radii(droplet);
     droplet_data(0) = step;

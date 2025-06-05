@@ -11,6 +11,8 @@
 
 #include <math.h>
 
+#include "LBM_binary.H"
+
 MultiFab binarize_droplet(const MultiFab& hydrovars, int comp = 1, Real cutoff = 0.){
     BoxArray ba = hydrovars.boxArray();
     DistributionMapping dm = hydrovars.DistributionMap();
@@ -89,6 +91,186 @@ GpuArray<Real,3> center_of_mass(MultiFab& droplet){
     }
     return com;
 }
+
+// Fitting expression to the density profile
+
+void sort_by_r(const std::vector<Real>& r,
+               const std::vector<Real>& rho,
+               std::vector<Real>& r_sorted,
+               std::vector<Real>& rho_sorted){
+    int N = r.size();
+    // std::vector<int> idxs(N);
+    std::vector<int> idxs(N);
+    std::iota(idxs.begin(), idxs.end(), 0); // idxs = [0, 1, ..., N-1]
+
+    // Sort indices based on values in r
+    std::sort(idxs.begin(), idxs.end(),
+            [&r](int i1, int i2) { return r[i1] < r[i2]; });
+
+    // Reorder r and rho based on sorted indices
+    // r_sorted.resize(N);
+    // rho_sorted.resize(N);
+    for (int i = 0; i < N; ++i) {
+        r_sorted[i] = r[idxs[i]];
+        rho_sorted[i] = rho[idxs[i]];
+    }
+}
+
+inline Real model(Real r, Real a, Real R, Real zeta, Real b) {
+    return a*std::tanh((r - R)/(std::sqrt(2.0)*zeta)) + b;
+}
+
+Real compute_cost(const std::vector<Real>& r,
+                    const std::vector<Real>& rho,
+                    Real a, Real R, Real zeta, Real b) {
+    Real cost = 0.0;
+    for (size_t i = 0; i < r.size(); ++i) {
+        Real res = model(r[i], a, R, zeta, b) - rho[i];
+        cost += res * res;
+    }
+    return cost;
+}
+
+void compute_gradient(const std::vector<Real>& r,
+                      const std::vector<Real>& rho,
+                      Real a, Real R, Real zeta, Real b,
+                      std::vector<Real>& grad,
+                      Real epsilon = 1e-6) {
+    Real base_cost = compute_cost(r, rho, a, R, zeta, b);
+
+    // grad.resize(4);
+
+    grad[0] = (compute_cost(r, rho, a + epsilon, R, zeta, b) - base_cost) / epsilon; // ∂/∂a
+    grad[1] = (compute_cost(r, rho, a, R + epsilon, zeta, b) - base_cost) / epsilon; // ∂/∂R
+    grad[2] = (compute_cost(r, rho, a, R, zeta + epsilon, b) - base_cost) / epsilon; // ∂/∂zeta
+    grad[3] = (compute_cost(r, rho, a, R, zeta, b + epsilon) - base_cost) / epsilon; // ∂/∂b
+}
+
+std::vector<Real> fit_tanh_model(const std::vector<Real> r,
+                    const std::vector<Real> rho,
+                    std::vector<Real> init_params,
+                    int max_iters = 1e4, Real lr = 1e-6) {
+    
+    Real a = init_params[0]; Real R = init_params[1]; Real zeta = init_params[2]; Real b = init_params[3];
+    std::vector<Real> fit_params(4);
+
+    Real previous_cost = 0.0;
+    Real threshold = 1e-5;
+
+    for (int iter = 0; iter < max_iters; ++iter) {
+        std::vector<Real> grad(4);
+        compute_gradient(r, rho, a, R, zeta, b, grad);
+
+        // Update parameters
+        a    -= lr * grad[0];
+        R    -= lr * grad[1];
+        zeta -= lr * grad[2];
+        b    -= lr * grad[3];
+
+        if (iter % 100 == 0) {
+            Real cost = compute_cost(r, rho, a, R, zeta, b);
+            if (Math::abs(cost - previous_cost) < threshold){break;}
+            else{previous_cost = cost;}
+        }
+    }
+    fit_params[0] = a; fit_params[1] = R; fit_params[2] = zeta; fit_params[3] = b;
+    return fit_params;
+}
+
+std::vector<Real> copy_mf_to_vector(MultiFab& mf, std::vector<Real> vec){
+    int offset = 0;
+    for (MFIter mfi(mf); mfi.isValid(); ++mfi)
+    {
+        const Box& box = mfi.validbox();  // or tilebox()
+        const auto& fab = mf[mfi];
+
+        const Real* fab_ptr = fab.dataPtr(0);
+        int npts = box.numPts();
+
+        std::copy(fab_ptr, fab_ptr + npts, vec.begin() + offset);
+        offset += npts;
+    }
+
+    return vec;
+}
+
+Real droplet_radius_profile_fit(MultiFab& droplet){
+    BL_PROFILE_VAR("droplet_radius_profile_fit()",droplet_radius_profile_fit);
+    Real fitted_radius;
+
+    GpuArray<Real,3> com;
+    com = center_of_mass(droplet);
+        
+    MultiFab indices;
+    indices = get_indices(droplet);
+    
+    BoxArray ba = droplet.boxArray();
+    DistributionMapping dm = droplet.DistributionMap();
+
+    Box domain_box = ba.minimalBox();
+    const IntVect domain_size = domain_box.size();
+    const int nx = domain_size[0]; const int ny = domain_size[1]; const int nz = domain_size[2];
+    int N = nx*ny*nz;
+    // Print() << "nx: " << nx << ", ny: " << ny << ", nz: " << nz << ", N: "<< N << '\n';
+    MultiFab R(ba, dm, 1, 0);
+
+    // adding square of indices to radius before square root
+
+    auto const & radius_arr = R.arrays();
+    auto const & ind_arr = indices.arrays();
+    ParallelFor(R, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+        Real xdiff = Real(ind_arr[nbx](x,y,z,0)) - Real(com[0]);
+        Real ydiff = Real(ind_arr[nbx](x,y,z,1)) - Real(com[1]);
+        Real zdiff = Real(ind_arr[nbx](x,y,z,2)) - Real(com[2]);
+
+        radius_arr[nbx](x,y,z,0) = sqrt(xdiff*xdiff + ydiff*ydiff + zdiff*zdiff);
+    });
+    
+    // need to convert from multifab to another data object for sorting using std::sort. NOT GPU COMPATIBLE FOR NOW
+    std::vector<Real> R_flat(N), rho_flat(N), R_flat_sorted(N), rho_flat_sorted(N);
+
+    R_flat = copy_mf_to_vector(R, R_flat);
+    rho_flat = copy_mf_to_vector(droplet, rho_flat);
+
+    // Print() << "Created object\n";
+    // for (MFIter mfi(droplet); mfi.isValid(); ++mfi){
+    //   const Array4<Real>& density = droplet.array(mfi);
+    //   const Array4<Real>& f = R.array(mfi);
+
+    //   for(int i = 0; i < nx; i++){
+    //     for(int j = 0; j < ny; j++){
+    //       for(int k = 0; k < nz; k++){
+    //         int idx = i + nx*(j + ny*k);
+    //         // Print() << density(i,j,k,0) << "\n";
+    //         R_flat[idx] = f(i,j,k,0);
+    //         rho_flat[idx] = density(i,j,k,0);
+    //         Print() << "idx:" << idx << ", r_flat:" << R_flat[idx] << ", rho_flat:" << rho_flat[idx] << "\n";
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    Print() << "Copy complete" << "\n";
+    // Print() << "R at index 0: " << R_flat[0] << ", droplet at index 0: " << rho_flat[0] << "\n";
+    // Print() << "R at index N/2: " << R_flat[N/2] << ", droplet at index N/2: " << rho_flat[N/2] << "\n";
+    // Print() << "R at index -1: " << R_flat[N - 1] << ", droplet at index N/2: " << rho_flat[N - 1] << "\n";
+
+    sort_by_r(R_flat, rho_flat, R_flat_sorted, rho_flat_sorted);
+    Print() << "R at index 0: " << R_flat_sorted[0] << ", droplet at index 0: " << rho_flat_sorted[0] << "\n";
+    Print() << "R at index N/2: " << R_flat_sorted[N/2] << ", droplet at index N/2: " << rho_flat_sorted[N/2] << "\n";
+    Print() << "R at index -1: " << R_flat_sorted[N - 1] << ", droplet at index N/2: " << rho_flat_sorted[N - 1] << "\n";
+
+    std::vector<Real> init_params = {(droplet.min(0) - droplet.max(0))/2., droplet_radius_prop*nx, sqrt(kappa/(chi/2. - T)),(droplet.min(0) + droplet.max(0))/2.}; // a, R, zeta, b
+    std::vector<Real> fitted_params(4);
+
+    fitted_params = fit_tanh_model(R_flat_sorted, rho_flat_sorted,init_params);
+    fitted_radius = fitted_params[1];
+    // fitted_radius = 0.3*nx;
+
+    return fitted_radius;
+}
+
+// Fitting expression to the density profile
 
 GpuArray<Real,9> gyration_tensor(GpuArray<Real,3> com, MultiFab& droplet){
     // Array1D<Real,0,9> S;
