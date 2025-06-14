@@ -1,22 +1,23 @@
 #!/bin/bash
 
 #setup from the perspective of the folder it is run in
-amrex_exec="../../../../../spatially_independent/main3d.gnu.MPI.ex"
+amrex_exec="../../../../../../spatially_independent/main3d.gnu.MPI.ex"
+#amrex_exec="../../../../../main3d.gnu.MPI.ex"
 
 # Defines the radius of the droplet as a proportion of system size. 0.5 is maximum
 droplet_radii=("0.30" "0.35" "0.40")
-chi_s=("2.15" "2.25" "2.5" "2.75" "3" "3.25")# "3.5" "3.75" "4" "4.25" "4.5" "4.75" "5")
+chi_s=("2.05" "2.1" "2.15" "2.2" "2.25" "2.3" "2.35" "2.45" "2.5") # "3.5" "3.75" "4" "4.25" "4.5" "4.75" "5")
 T="0.2"
-kappa="0.03"
+kappa="0.01"
 
 # Define property to be looped over and edited in input file
 search_pattern1="droplet_radius_prop = 0.3"
 search_pattern2="chi = 0.45"
-search_pattern3="kappa = 0.03"
+search_pattern3="kappa = 0.01"
 
 for chi in "${chi_s[@]}"; do
 
-base_folder="chi_${chi}/kappa_${kappa}"
+base_folder="T_${T}/chi_${chi}/kappa_${kappa}"
 
 if [ ! -d "$base_folder" ]; then
   echo "$base_folder does not exist. Creating $base_folder"
@@ -36,12 +37,12 @@ for droplet_radius in "${droplet_radii[@]}"; do
     mkdir -p "$folder"
   fi
 
-  cp ../../inputs_young-laplace $folder
+  cp ../../../inputs_young-laplace $folder
 
   # Enters folder and executes commands before returning to parent directory
   cd $folder
   # Checks if run is complete and executes a run with appropriate modifications if it has not
-  if [ -e "checkpoint_000075000" ]; then
+  if [ -e "checkpoint_000100000" ]; then
     echo "Run complete"
     cd ..
     continue
@@ -61,5 +62,5 @@ for droplet_radius in "${droplet_radii[@]}"; do
   fi
   cd ..
 done
-cd ../..
+cd ../../../
 done
