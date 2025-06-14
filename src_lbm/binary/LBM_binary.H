@@ -87,7 +87,7 @@ Array1D<Real,0,2> chemical_potentials(const Array1D<Real,0,2>& fields,
   #endif
 
   mu(1) = // Eq. (38) in Swift et al.
-    - chi/2.*phi/rho + T/2*log((rho+phi)/(rho-phi)) - kappa*D2phi;
+    - chi/2.*phi/rho + T/2.*log((rho+phi)/(rho-phi)) - kappa*D2phi;
 
   return mu;
 }
@@ -96,6 +96,7 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real pressure(Real rho, Real phi) {
 
   Real p0 = rho*T; // Eq. (40) in Swift et al.
+  p0 += rho*cs2; // ideal gas pressure
   // note that gradient terms are included in fequilibrium
 
   return p0;
