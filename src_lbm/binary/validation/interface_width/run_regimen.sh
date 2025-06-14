@@ -1,17 +1,18 @@
 #!/bin/bash
 
 #setup from the perspective of the folder it is run in
-amrex_exec="../../../../spatially_independent/main3d.gnu.MPI.ex"
+#amrex_exec="../../../../spatially_independent/main3d.gnu.MPI.ex"
+amrex_exec="../../../../main3d.gnu.MPI.ex"
 
 # Defines the radius of the droplet as a proportion of system size. 0.5 is maximum
 #("2.15" "2.25" "2.5" "2.75" "3" "3.25")
-chi_s=("2.15" "2.25" "2.5" "2.75" "3" "3.25") #"3.5" "3.75" "4" "4.25" "4.5" "4.75" "5")
+chi_s=("2.05" "2.10" "2.15" "2.25" "2.3" "2.35" "2.4" "2.45" "2.5")
 T="0.2"
-kappa="0.03"
+kappa="0.01"
 
 # Define property to be looped over and edited in input file
-search_pattern2="chi = 0.45"
-search_pattern3="kappa = 0.03"
+search_pattern2="chi = 0.42"
+search_pattern3="kappa = 0.01"
 
 for chi in "${chi_s[@]}"; do
 
@@ -27,7 +28,7 @@ echo ${PWD}
 
 cp ../../inputs_interface_width .
 
-if [ -e "checkpoint_000020000" ]; then
+if [ -e "checkpoint_000030000" ]; then
   echo "Run complete"
   cd ../../
   continue
@@ -40,7 +41,7 @@ else
   replacement_text="kappa = ${kappa}"
   sed -i "s/$search_pattern2/$replacement_text/g" inputs_interface_width # edits input file with appropriate setting
 
-  mpirun -n 4 $amrex_exec inputs_interface_width > output.txt
+  mpirun -n 1 $amrex_exec inputs_interface_width > output.txt
   # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
 fi
 cd ../..
