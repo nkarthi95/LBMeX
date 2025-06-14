@@ -1,23 +1,25 @@
 # box dimensions
 nx = 64
-ny = 2
+ny = 1
 nz = 512
 max_grid_size_x = 64
-max_grid_size_y = 2
+max_grid_size_y = 1
 max_grid_size_z = 64
 init_cond = 1
 
 # timestepping options
-nsteps = 500000
-plot_int = 1000
-n_checkpoint = 50000
+nsteps = 300000
+plot_int = 50
+n_checkpoint = 100000
 restore_string = 0
 dump_SF = 0
-dump_hydro = 1000
+dump_hydro = 1
+dump_start = 295000
 analysis_int = 0
+fluctuation_start = 30000
 
 # model parameters
-chi = 0.418
+chi = 0.42
 T = 0.2
 kappa = 0.01
 gamma = 1.0
