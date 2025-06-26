@@ -2,7 +2,7 @@
 nx = 128
 ny = 1
 nz = 16
-max_grid_size_x = 128 
+max_grid_size_x = 128
 max_grid_size_y = 1
 max_grid_size_z = 16
 init_cond = 1
@@ -15,12 +15,11 @@ n_checkpoint = 30000
 restore_string = 0
 dump_SF = 0
 dump_hydro = 1
-dump_start = 20000
 analysis_int = 0
 analysis_file = "analysis.csv"
 
 # model parameters
-chi = 0.42
+chi = 0.45
 T = 0.2
 kappa = 0.01
 gamma = 1.0
