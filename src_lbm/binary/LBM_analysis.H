@@ -96,7 +96,7 @@ GpuArray<Real,3> center_of_mass(MultiFab& droplet){
 }
 
 // Fitting expression to the density profile
-
+#ifndef AMREX_USE_CUDA
 void sort_by_r(const std::vector<Real>& r,
                const std::vector<Real>& rho,
                std::vector<Real>& r_sorted,
@@ -272,7 +272,7 @@ Real droplet_radius_profile_fit(MultiFab& droplet){
 
     return fitted_radius;
 }
-
+#endif
 // Fitting expression to the density profile
 
 GpuArray<Real,9> gyration_tensor(GpuArray<Real,3> com, MultiFab& droplet){

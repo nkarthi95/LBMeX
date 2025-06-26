@@ -88,7 +88,7 @@ GpuArray<Real,ndof*ndof> noise_covariance_matrix(const Real rho0, const Real phi
   // p = rho*T - kappa*(rho*D2rho+phi*D2phi)
   // mu =  T/2*log(rho+phi) - T/2*log(rho-phi) - chi/2*phi/rho - kappa*D2phi
   const Real kT = temperature;
-  const Real cs2 = T + kappa*k2*rho0; // p_rho => modified speed of sound
+  const Real cs2 = 1./3. + T + kappa*k2*rho0; // p_rho => modified speed of sound
   const Real p_phi = kappa*k2*phi0;
   const Real mu_rho = -T*phi0/(rho0*rho0-phi0*phi0) + chi/2*phi0/(rho0*rho0);
   const Real mu_phi = T*rho0/(rho0*rho0-phi0*phi0) - chi/2/rho0 + kappa*k2;
@@ -445,32 +445,6 @@ inline void collide_stream(const Geometry& geom,
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
 }
 
-// def replace_bulk_with_theoretical_interface(data, rho_liquid, rho_vapor, w):
-//     """
-//     Replace bulk values with coexistence densities, preserving a known interface width.
-
-//     Parameters:
-//         data: np.ndarray - original 3D array
-//         rho_liquid: float - coexistence density inside droplet
-//         rho_vapor: float - coexistence density outside droplet
-//         w: float - theoretical interface width in voxel units
-//     """
-//     rho_mid = 0.5 * (rho_liquid + rho_vapor)
-//     drho = abs(rho_liquid - rho_vapor)
-    
-//     # Define interfacial band as +/- half interface width
-//     interface_min = rho_mid - 0.5*drho*np.tanh(np.sqrt(2)/w)  # optional: adjust based on tanh profile
-//     interface_max = rho_mid + 0.5*drho*np.tanh(np.sqrt(2)/w)
-
-//     result = data.copy()
-    
-//     # Assign coexistence densities outside the interfacial region
-//     result[data < interface_min] = min(rho_liquid, rho_vapor)
-//     result[data > interface_max] = max(rho_liquid, rho_vapor)
-    
-//     # Interface remains unchanged
-//     return result
-
 inline void replace_reference(MultiFab& reference){
   const Real C1 = 1. - get_phi0(chi, T);
   const Real C2 = 1. - C1;
@@ -498,7 +472,7 @@ inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& hydrovs, MultiFab& noise, 
        MultiFab& reference, int curr_step) {
   BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
-  if(temperature == 0.0 or curr_step < fluctuation_start){
+  if(temperature == 0.0 or curr_step < fluctuation_start and T < chi/2.){
     noise.setVal(0.);
     // MultiFab reference(ba, dm, 2, nghost);
     reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
@@ -508,11 +482,11 @@ inline void LBM_timestep(const Geometry& geom,
   }
   else{    
     #if UNCORRELATED_NOISE
-      generate_fluctuations(geom, hydrovs, noise);
-      // generate_fluctuations(geom, reference, noise);
+      // generate_fluctuations(geom, hydrovs, noise);
+      generate_fluctuations(geom, reference, noise);
     #else
-      generate_correlated_fluctuations(geom, hydrovs, noise);
-      // generate_correlated_fluctuations(geom, reference, noise);
+      // generate_correlated_fluctuations(geom, hydrovs, noise);
+      generate_correlated_fluctuations(geom, reference, noise);
     #endif
   }
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);

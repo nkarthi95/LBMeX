@@ -149,16 +149,20 @@ void main_driver(const char* argv) {
   MultiFab test_noise(ba, dm, 2*nvel, nghost);
   MultiFab reference(ba, dm, 2, nghost);
   reference.setVal(1.0, 0, 1, nghost); // set reference density to a constant value rho = 1.0
+  reference.setVal(0., 1, 1, nghost); // set reference order parameter to a constant value phi = 0.0
 
   // droplet analysis
   MultiFab droplet(ba, dm, 1, 0);
 
   // set up StructFact
-  int nStructVars = 5;
+  int nStructVars = 14;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
-  const Vector<int> pairA = { 0, 1, 2, 3, 4 };
-  const Vector<int> pairB = { 0, 1, 2, 3, 4 };
-  const Vector<Real> var_scaling = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+  // const Vector<int> pairA = { 0, 1, 2, 3, 4 };
+  // const Vector<int> pairB = { 0, 1, 2, 3, 4 };
+  // const Vector<Real> var_scaling = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+  Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
+  Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
+  const Vector<Real> var_scaling(nStructVars, 1.0);
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
   // INITIALIZE
