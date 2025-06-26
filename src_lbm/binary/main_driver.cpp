@@ -10,9 +10,12 @@ using namespace amrex;
 
 #include "LBM_binary.H"
 #include "LBM_fluctuations.H"
-#include "LBM_tests.H"
 #include "LBM_IO.H"
+
+#ifndef AMREX_USE_CUDA
 #include "LBM_analysis.H"
+#include "LBM_tests.H"
+#endif
 
 // default grid parameters
 IntVect domain_size(16);
@@ -83,6 +86,7 @@ inline void WriteOutput(int step,
   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
 }
 
+#ifndef AMREX_USE_CUDA
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
   for (int i = 0; i < 8; i++){
     PrintToFile(analysis_filePath, 0) << data_to_append(i) << ",";
@@ -117,6 +121,7 @@ inline void droplet_analysis(const std::string analysis_filePath, const int step
     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
     write_csv(analysis_filePath, droplet_data);
 }
+#endif
 
 void main_driver(const char* argv) {
 
@@ -178,9 +183,11 @@ void main_driver(const char* argv) {
     case 2:
       LBM_init_droplet(droplet_radius_prop, geom, fold, gold, hydrovs);
       start_time = 0;
+      #ifndef AMREX_USE_CUDA
       col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
       write_csv(analysis_filePath, col_headers);
       droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
+      #endif
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
@@ -193,8 +200,10 @@ void main_driver(const char* argv) {
   if (checkpoint_int > 0) WriteCheckPoint(start_time, hydrovs); start_time++;
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
-  #if AMREX_DEBUG
-  unit_tests(geom, hydrovs);
+  #ifndef AMREX_USE_CUDA
+    #if AMREX_DEBUG
+      unit_tests(geom, hydrovs);
+    #endif
   #endif
 
   // TIMESTEP
@@ -208,7 +217,9 @@ void main_driver(const char* argv) {
     if (checkpoint_int > 0 && step%checkpoint_int ==0){
       WriteCheckPoint(step, hydrovs);
     }
+    #ifndef AMREX_USE_CUDA
     if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(analysis_filePath, step, hydrovs, droplet);}
+    #endif
   }
 
   Print() << "LB completed " << nsteps << " time steps" << std::endl;

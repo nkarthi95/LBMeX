@@ -5,7 +5,7 @@
 #include <lapack.h>
 
 #include "LBM_binary.H"
-#include "LBM_tests.H"
+// #include "LBM_tests.H"
 
 AMREX_GPU_MANAGED Real temperature = 1e-7;
 

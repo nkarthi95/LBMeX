@@ -34,7 +34,7 @@ include $(AMREX_HOME)/Tools/GNUMake/Make.rules
 
 ifeq ($(USE_CUDA),TRUE)
   LIBRARIES += -lcufft
-  LIBRARIES += -lculapack
+#  LIBRARIES += -lculapack
 else
   LIBRARIES += $(shell pkg-config --libs fftw3)
   LIBRARIES += $(shell pkg-config --libs lapack)

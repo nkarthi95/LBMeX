@@ -2,11 +2,12 @@
 #define LBM_analysis_H_
 
 #ifdef AMREX_USE_CUDA
-#include <culapacke.h> // this does not work yet. GPU support not implemented
-#include <cufft.h>
+#include <culapack.h> // this does not work yet. GPU support not implemented
+// #include <cufft.h>
+#include <>
 #else
 #include <lapack.h>
-#include <fftw3.h>
+// #include <fftw3.h>
 #endif
 
 #include <math.h>

@@ -481,12 +481,12 @@ inline void LBM_init_flat_interface(const Geometry& geom,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-    #if (AMREX_SPACEDIM == 2)
-        const Real r2 = rx*rx+ry*ry;
-    #elif (AMREX_SPACEDIM == 3)
-        const Real rz = z-box[0]/2;
-        const Real r2 = rx*rx+ry*ry+rz*rz;
-    #endif
+    // #if (AMREX_SPACEDIM == 2)
+    //     const Real r2 = rx*rx+ry*ry;
+    // #elif (AMREX_SPACEDIM == 3)
+    //     const Real rz = z-box[0]/2;
+    //     const Real r2 = rx*rx+ry*ry+rz*rz;
+    // #endif
         const Real rho=1.0;
         Real phi = phi0*tanh((rx+0.5)/(sqrt(2.)*xi));
         for (int i=0; i<nvel; i++) {

@@ -274,7 +274,7 @@ void checkpointRestart(int& step, MultiFab& hydrovs, MultiFab& fold, MultiFab& g
     // rho phi ux uy uz phi*ux phi*uy phi*uz mf4...mf18 mg4...mg18
     ParallelFor(box, [=] AMREX_GPU_DEVICE(int x, int y, int z) {
       Array1D<Real,0,nvel> mf; Array1D<Real,0,nvel> mg;
-      Array1D<Real,0,nvel> f_dist; Array1D<Real,0,nvel> g_dist;
+    //   Array1D<Real,0,nvel> f_dist; Array1D<Real,0,nvel> g_dist;
       mf(0) = h(x,y,z,0);
       mg(0) = h(x,y,z,1);
       for(int i = 1; i < 4; i++){
