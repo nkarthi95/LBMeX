@@ -6,21 +6,23 @@ max_grid_size_x = 32
 max_grid_size_y = 32
 max_grid_size_z = 32
 init_cond = 2
-droplet_radius_prop = 0.35
+droplet_radius_prop = 0.3
 
 # timestepping options
-nsteps = 1000000
-plot_int = 1000
-n_checkpoint = 50000
+nsteps = 1200000
+plot_int = 50
+n_checkpoint = 100000
 restore_string = 0
 dump_SF = 0
 dump_hydro = 1
+dump_start = 1000050
+fluctuation_start = 1000001
 analysis_int = 0
 analysis_file = "analysis.csv"
 
 # model parameters
-chi = 1.1
-T = 0.526
+chi = 0.42
+T = 0.2
 kappa = 0.01
 gamma = 1.0
 
