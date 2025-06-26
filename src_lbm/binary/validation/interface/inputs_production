@@ -4,7 +4,7 @@ ny = 1
 nz = 512
 max_grid_size_x = 64
 max_grid_size_y = 1
-max_grid_size_z = 64
+max_grid_size_z = 128
 init_cond = 1
 
 # timestepping options

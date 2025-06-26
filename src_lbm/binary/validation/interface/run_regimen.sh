@@ -36,7 +36,7 @@ for noise in "${noise_type[@]}"; do
   else
     echo "Executing commands in $folder"
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
-    mpirun -n 8 $amrex_exec inputs_production > run_output.txt
+    mpirun -n 4 $amrex_exec inputs_production > run_output.txt
     # EDIT COMMANDS HERE TO MAKE MODIFICATIONS TO RUNS #
   fi
   cd ..
