@@ -20,6 +20,8 @@ AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
 AMREX_GPU_MANAGED int fluctuation_start = 0;
 
 AMREX_GPU_MANAGED Real C1 = 0.5;
+AMREX_GPU_MANAGED Real rho_in = 1.0;
+AMREX_GPU_MANAGED Real rho_out = 1.0;
 
 // thermodynamic model coexistence phi0
 inline Real get_phi0(Real chi, Real T){
@@ -523,12 +525,13 @@ inline void LBM_init_droplet(const Real r,
     #endif
         const Real r = sqrt(r2);
 
-        const Real rho = 1.0;
+        // const Real rho = 1.0;
         // const Real phi = phi0*tanh((R-r)/sqrt(kappa));
         const Real phi = phi0*tanh((R-r)/(sqrt(2.)*xi));
 
         for (int i=0; i<nvel; i++) {
-          f[nbx](x,y,z,i) = w[i]*rho;
+          if(phi < 0){f[nbx](x,y,z,i) = w[i]*rho_out;}
+          else{f[nbx](x,y,z,i) = w[i]*rho_in;}
           g[nbx](x,y,z,i) = w[i]*phi;
         }
 

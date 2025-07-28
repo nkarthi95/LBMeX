@@ -31,6 +31,7 @@ int dump_start = 0;
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
 std::vector<std::string> col_headers;
+int nvars_dump = 2;
 
 inline void ReadInput() {
   ParmParse pp;
@@ -46,20 +47,29 @@ inline void ReadInput() {
   pp.query("max_grid_size_y", max_box_size[1]);
   pp.query("max_grid_size_z", max_box_size[2]);
   pp.query("init_cond", init_cond);
-  pp.query("droplet_radius_prop", droplet_radius_prop);
+  
+  /* Proportion of C1 in system. Only used for init_cond = 0 (mixed system)*/
   pp.query("C1", C1);
 
-  /* time stepping and output parameters */
+  /* Droplet properties when using init_cond = 2 (droplet)*/
+  pp.query("droplet_radius_prop", droplet_radius_prop);
+  pp.query("rho_in", rho_in);
+  pp.query("rho_out", rho_out);
+
+  /* time stepping */
   pp.query("nsteps", nsteps);
   pp.query("plot_int", plot_int);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
   pp.query("fluctuation_start", fluctuation_start);
+
+  /* output parameters */
   pp.query("dump_start", dump_start);
   pp.query("dump_SF", dump_SF);
   pp.query("dump_hydro", dump_hydro);
   pp.query("analysis_int", analysis_int);
   pp.query("analysis_file", analysis_filePath);
+  pp.query("nvars_dump", nvars_dump);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -79,7 +89,7 @@ inline void WriteOutput(int step,
       StructFact& structFact) {
   // set up variable names for output
   const int zero_avg = 1;
-  const int nvars = 14;
+  const int nvars = nvars_dump;
   const Vector<std::string> var_names = hydrovars_names(nvars);
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
