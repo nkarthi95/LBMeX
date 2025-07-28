@@ -22,6 +22,8 @@ AMREX_GPU_MANAGED int fluctuation_start = 0;
 AMREX_GPU_MANAGED Real C1 = 0.5;
 AMREX_GPU_MANAGED Real rho_in = 1.0;
 AMREX_GPU_MANAGED Real rho_out = 1.0;
+AMREX_GPU_MANAGED Real phi_in = 0.0;
+AMREX_GPU_MANAGED Real phi_out = 0.0;
 
 // thermodynamic model coexistence phi0
 inline Real get_phi0(Real chi, Real T){
@@ -508,8 +510,16 @@ inline void LBM_init_droplet(const Real r,
   const IntVect box = geom.Domain().length();
   const Real R = r*box[0];
   // const Real phi0 = sqrt(3.*(chi/2. - T)/(chi/2.));
-  const Real phi0 = get_phi0(chi, T);
-  const Real xi = get_xi((phi0+1.)/2., chi, T, kappa);
+  Real A, B;
+  if (phi_in > 0.0 && phi_out < 0.0) {
+      A = (phi_in + phi_out)/2.; // difference between high and low values
+      B = (phi_in - phi_out)/2.; // mean of high and low values
+  }
+  else{
+    B = get_phi0(chi, T);
+    A = 0.0;
+  }
+  const Real xi = get_xi((B+1.)/2., chi, T, kappa);
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -527,11 +537,13 @@ inline void LBM_init_droplet(const Real r,
 
         // const Real rho = 1.0;
         // const Real phi = phi0*tanh((R-r)/sqrt(kappa));
-        const Real phi = phi0*tanh((R-r)/(sqrt(2.)*xi));
+        const Real phi = A + B*tanh((R-r)/(sqrt(2.)*xi));
 
         for (int i=0; i<nvel; i++) {
-          if(phi < 0){f[nbx](x,y,z,i) = w[i]*rho_out;}
-          else{f[nbx](x,y,z,i) = w[i]*rho_in;}
+          if(phi < 0){
+            f[nbx](x,y,z,i) = w[i]*rho_out;}
+          else{
+            f[nbx](x,y,z,i) = w[i]*rho_in;}
           g[nbx](x,y,z,i) = w[i]*phi;
         }
 

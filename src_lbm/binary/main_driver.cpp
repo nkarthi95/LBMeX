@@ -55,6 +55,8 @@ inline void ReadInput() {
   pp.query("droplet_radius_prop", droplet_radius_prop);
   pp.query("rho_in", rho_in);
   pp.query("rho_out", rho_out);
+  pp.query("phi_in", phi_in);
+  pp.query("phi_out", phi_out);
 
   /* time stepping */
   pp.query("nsteps", nsteps);
