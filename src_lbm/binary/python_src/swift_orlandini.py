@@ -1,5 +1,10 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from d3q19 import lattice_fourier_laplacian
 from scipy.optimize import newton
+from scipy.integrate import quad
 import numpy as np
 
 class swift_et_al_1996_thermodynamic_model:
@@ -70,7 +75,7 @@ class swift_et_al_1996_thermodynamic_model:
         self.C0 = C0
 
     def sound_speed_square(self):
-        out = self.T+cs2_ideal
+        out = self.T+1/3
         return out
 
     def cs2k(self, kx = 0, ky = 0, kz = 0):

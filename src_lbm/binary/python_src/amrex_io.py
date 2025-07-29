@@ -1,5 +1,6 @@
 import yt
 import numpy as np
+import csv
 
 def read_amrex_data(ds, boxDim):
     """
@@ -59,9 +60,26 @@ def read_amrex_data(ds, boxDim):
 
 def read_csv(path):
     ls = []
-    with open(path) as csvfile:
+    with open(path, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter=" ", quotechar="|")
-        for row in reader:
-            ls.append([float(i) for i in row[0].split(",")[:-1]])
-        ls = np.array(ls)
-    return ls
+        
+        for idx, row in enumerate(reader):
+            if not row or not row[0].strip():
+                continue  # Skip empty rows
+
+            tokens = row[0].strip().split(",")[:-1]  # Remove trailing empty after final comma
+
+            # Attempt to convert all to float
+            try:
+                parsed = [float(tok) for tok in tokens]
+            except ValueError:
+                if idx == 0:
+                    # First row failed to convert — assume it's a header
+                    continue
+                else:
+                    # Data row failed to convert — preserve as strings
+                    parsed = tokens
+
+            ls.append(parsed)
+
+    return np.array(ls, dtype=object if any(isinstance(i, str) for row in ls for i in row) else float)
