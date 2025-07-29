@@ -33,6 +33,7 @@ dump_hydro = 1
 analysis_int = 10
 analysis_file = "droplet_analysis.csv"
 nvars_dump = 2
+dump_distribution = 0
 
 # model parameters
 chi = 0.42

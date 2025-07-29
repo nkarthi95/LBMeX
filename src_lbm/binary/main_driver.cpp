@@ -28,6 +28,7 @@ int start_time = 0;
 int dump_SF = 0;
 int dump_hydro = 1;
 int dump_start = 0;
+int dump_distribution = 0;
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
 std::vector<std::string> col_headers;
@@ -66,6 +67,7 @@ inline void ReadInput() {
   pp.query("fluctuation_start", fluctuation_start);
 
   /* output parameters */
+  pp.query("dump_distribution", dump_distribution);
   pp.query("dump_start", dump_start);
   pp.query("dump_SF", dump_SF);
   pp.query("dump_hydro", dump_hydro);
@@ -96,6 +98,28 @@ inline void WriteOutput(int step,
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
+}
+
+inline void WriteDists(int step,
+                       const Geometry& geom,
+                       const MultiFab& f,
+                       const MultiFab& g) {
+    std::string pltfile;
+    Vector<std::string> var_names(nvel);
+
+    // f distribution
+    pltfile = amrex::Concatenate("dist_g",step,9);
+    for (int i = 0; i < nvel; i++) {
+      var_names[i] = "f" + std::to_string(i);
+    }
+    WriteSingleLevelPlotfile(pltfile, f, var_names, geom, Real(step), step);
+    
+    // g distribution
+    pltfile = amrex::Concatenate("dist_f",step,9);
+    for (int i = 0; i < nvel; i++) {
+      var_names[i] = "g" + std::to_string(i);
+    }
+    WriteSingleLevelPlotfile(pltfile, g, var_names, geom, Real(step), step);
 }
 
 #ifndef AMREX_USE_CUDA
@@ -225,6 +249,9 @@ void main_driver(const char* argv) {
     if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
       WriteOutput(step, geom, hydrovs, structFact);
       Print() << "LB step " << step << std::endl;
+      if(dump_distribution > 0){
+        WriteDists(step, geom, fold, gold);
+      }
     }
     if (checkpoint_int > 0 && step%checkpoint_int ==0){
       WriteCheckPoint(step, hydrovs);
