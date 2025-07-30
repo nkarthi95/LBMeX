@@ -108,14 +108,14 @@ inline void WriteDists(int step,
     Vector<std::string> var_names(nvel);
 
     // f distribution
-    pltfile = amrex::Concatenate("dist_g",step,9);
+    pltfile = amrex::Concatenate("dist_f",step,9);
     for (int i = 0; i < nvel; i++) {
       var_names[i] = "f" + std::to_string(i);
     }
     WriteSingleLevelPlotfile(pltfile, f, var_names, geom, Real(step), step);
     
     // g distribution
-    pltfile = amrex::Concatenate("dist_f",step,9);
+    pltfile = amrex::Concatenate("dist_g",step,9);
     for (int i = 0; i < nvel; i++) {
       var_names[i] = "g" + std::to_string(i);
     }
@@ -249,10 +249,12 @@ void main_driver(const char* argv) {
     if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
       WriteOutput(step, geom, hydrovs, structFact);
       Print() << "LB step " << step << std::endl;
-      if(dump_distribution > 0){
-        WriteDists(step, geom, fold, gold);
-      }
     }
+    
+    if(dump_distribution > 0 && step >= dump_start){
+        WriteDists(step, geom, fold, gold);
+    }
+
     if (checkpoint_int > 0 && step%checkpoint_int ==0){
       WriteCheckPoint(step, hydrovs);
     }
