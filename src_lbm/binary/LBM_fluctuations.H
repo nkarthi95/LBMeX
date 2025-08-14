@@ -4,6 +4,7 @@
 #include <AMReX_FFT.H>
 #include <lapack.h>
 
+#include "LBM_analysis.H"
 #include "LBM_binary.H"
 // #include "LBM_tests.H"
 
@@ -480,7 +481,25 @@ inline void LBM_timestep(const Geometry& geom,
     // Print() << "equilibration";
     // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
   }
-  else{    
+  else{
+    // Multifab droplet = MultiFab(hydrovs, make_deep_copy, 1, 1);
+
+    // moving the center of mass of the reference state to track the movement of the system
+    #if 0
+    Multifab new_ref(hydrovs, make_deep_copy, 1, 1);
+    new_ref = binarize_droplet(hydrovs, 1, 0);
+    GpuArray<Real, 3> com_new = center_of_mass(new_ref);
+
+    Multifab binarize_droplet_ref(reference, make_deep_copy, 1, 1);
+    binarize_droplet_ref = binarize_droplet(binarize_droplet_ref, 1, 0);
+    GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
+
+    IntVect diff(0);
+    for(int i = 0; i < AMREX_SPACEDIM; i++){diff[i] = static_cast<int>(com_new[i] - com_ref[i]);}
+    Print() << diff[0] << diff[1] << diff[2];
+    reference.shift(diff);
+    #endif
+    
     #if UNCORRELATED_NOISE
       // generate_fluctuations(geom, hydrovs, noise);
       generate_fluctuations(geom, reference, noise);

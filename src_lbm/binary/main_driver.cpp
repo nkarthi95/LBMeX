@@ -29,6 +29,9 @@ int dump_SF = 0;
 int dump_hydro = 1;
 int dump_start = 0;
 int dump_distribution = 0;
+// int plot_int = nsteps;
+int distribution_int = nsteps;
+
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
 std::vector<std::string> col_headers;
@@ -65,6 +68,7 @@ inline void ReadInput() {
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
   pp.query("fluctuation_start", fluctuation_start);
+  pp.query("distribution_int", distribution_int);
 
   /* output parameters */
   pp.query("dump_distribution", dump_distribution);
@@ -198,12 +202,9 @@ void main_driver(const char* argv) {
   // set up StructFact
   int nStructVars = 14;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
-  // const Vector<int> pairA = { 0, 1, 2, 3, 4 };
-  // const Vector<int> pairB = { 0, 1, 2, 3, 4 };
-  // const Vector<Real> var_scaling = { 1.0, 1.0, 1.0, 1.0, 1.0 };
-  Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
-  Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
-  const Vector<Real> var_scaling(nStructVars, 1.0);
+  const Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
+  const Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
+  const Vector<Real> var_scaling(pairA.size(), 1.0);
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
   // INITIALIZE
@@ -251,7 +252,7 @@ void main_driver(const char* argv) {
       Print() << "LB step " << step << std::endl;
     }
     
-    if(dump_distribution > 0 && step >= dump_start){
+    if(dump_distribution > 0 && step%distribution_int == 0 && step >= dump_start){
         WriteDists(step, geom, fold, gold);
     }
 

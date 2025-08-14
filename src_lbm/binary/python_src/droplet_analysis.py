@@ -129,87 +129,99 @@ def droplet_radius_mass(density, Vp = 0, np_sphere = 0, rho_sphere = 1):
         R = (3./4./np.pi*mass/(rho_d-rho_m))**(1./3.)
         return R
     
-def droplet_radius_profile_1d(density, center=None, fit='tanh', bins=100, binned = False):
-    """
-    Estimate droplet radius and interface width from a 3D density field
-    by fitting a 1D radial density profile to a tanh or erf function.
+# def droplet_radius_profile_1d(density, center=None, fit='tanh', bins=100, binned = False):
+#     """
+#     Estimate droplet radius and interface width from a 3D density field
+#     by fitting a 1D radial density profile to a tanh or erf function.
     
-    Parameters
-    ----------
-    density : ndarray
-        3D array of concentration or density values.
-    center : tuple or None
-        Optional center of mass (x, y, z). If None, center is computed from density.
-    fit : str
-        'tanh' or 'erf' for the fitting function.
-    bins : int
-        Number of radial bins for the profile.
+#     Parameters
+#     ----------
+#     density : ndarray
+#         3D array of concentration or density values.
+#     center : tuple or None
+#         Optional center of mass (x, y, z). If None, center is computed from density.
+#     fit : str
+#         'tanh' or 'erf' for the fitting function.
+#     bins : int
+#         Number of radial bins for the profile.
 
-    Returns
-    -------
-    popt : array
-        Fit parameters: [radius R, amplitude p0, baseline c, interfacial width xi]
-    r_bin_centers : array
-        Radii of the profile bins (for plotting, optional)
-    rho_r : array
-        Radial density profile used in the fit
-    """
+#     Returns
+#     -------
+#     popt : array
+#         Fit parameters: [radius R, amplitude p0, baseline c, interfacial width xi]
+#     r_bin_centers : array
+#         Radii of the profile bins (for plotting, optional)
+#     rho_r : array
+#         Radial density profile used in the fit
+#     """
 
-    X, Y, Z = np.indices(density.shape)
+#     X, Y, Z = np.indices(density.shape)
 
-    # Estimate center if not provided
-    if center is None:
-        cmx, cmy, cmz = center_of_mass(density)
-    else:
-        cmx, cmy, cmz = center
+#     # Estimate center if not provided
+#     if center is None:
+#         cmx, cmy, cmz = center_of_mass(density)
+#     else:
+#         cmx, cmy, cmz = center
 
-    # Compute radial distances from center
-    r = np.sqrt((X - cmx)**2 + (Y - cmy)**2 + (Z - cmz)**2).flatten()
-    rho = density.flatten()
+#     # Compute radial distances from center
+#     r = np.sqrt((X - cmx)**2 + (Y - cmy)**2 + (Z - cmz)**2).flatten()
+#     rho = density.flatten()
 
-    if binned:
-        # Bin by radius
-        r_bins = np.linspace(0, r.max(), bins + 1)
-        r_bin_centers = 0.5 * (r_bins[:-1] + r_bins[1:])
-        rho_r = np.zeros(bins)
+#     if binned:
+#         # Bin by radius
+#         r_bins = np.linspace(0, r.max(), bins + 1)
+#         r_bin_centers = 0.5 * (r_bins[:-1] + r_bins[1:])
+#         rho_r = np.zeros(bins)
 
-        for i in range(bins):
-            mask = (r >= r_bins[i]) & (r < r_bins[i+1])
-            rho_r[i] = np.mean(rho[mask]) if np.any(mask) else np.nan
+#         for i in range(bins):
+#             mask = (r >= r_bins[i]) & (r < r_bins[i+1])
+#             rho_r[i] = np.mean(rho[mask]) if np.any(mask) else np.nan
 
-        # Remove NaNs (can happen if outer bins are empty)
-        valid = ~np.isnan(rho_r)
-        r_bin_centers = r_bin_centers[valid]
-        rho_r = rho_r[valid]
-    else:
-        idxs_ascending = np.argsort(r)
-        r_bin_centers = r[idxs_ascending]
-        rho_r = rho[idxs_ascending]
+#         # Remove NaNs (can happen if outer bins are empty)
+#         valid = ~np.isnan(rho_r)
+#         r_bin_centers = r_bin_centers[valid]
+#         rho_r = rho_r[valid]
+#     else:
+#         idxs_ascending = np.argsort(r)
+#         r_bin_centers = r[idxs_ascending]
+#         rho_r = rho[idxs_ascending]
 
-    # Define fitting function
-    if fit == 'tanh':
-        def fit_func(r, R, p0, c, xi):
-            return p0 * np.tanh((R - r) / (np.sqrt(2) * xi)) + c
-    elif fit == 'erf':
-        from scipy.special import erf
-        def fit_func(r, R, p0, c, xi):
-            return p0 * erf((R - r) / (np.sqrt(2) * xi)) + c
-    else:
-        raise ValueError("Invalid fit type. Use 'tanh' or 'erf'.")
+#     # Define fitting function
+#     if fit == 'tanh':
+#         def fit_func(r, R, p0, c, xi):
+#             return p0 * np.tanh((R - r) / (np.sqrt(2) * xi)) + c
+#     elif fit == 'erf':
+#         from scipy.special import erf
+#         def fit_func(r, R, p0, c, xi):
+#             return p0 * erf((R - r) / (np.sqrt(2) * xi)) + c
+#     else:
+#         raise ValueError("Invalid fit type. Use 'tanh' or 'erf'.")
 
-    # Guess initial parameters
-    p0_guess = 0.5 * (np.max(rho_r) - np.min(rho_r))
-    c_guess = 0.5 * (np.max(rho_r) + np.min(rho_r))
-    R_guess = r_bin_centers[np.argmin(np.abs(rho_r - c_guess))]
-    xi_guess = 0.3
-    guess = (R_guess, p0_guess, c_guess, xi_guess)
+#     # Guess initial parameters
+#     p0_guess = 0.5 * (np.max(rho_r) - np.min(rho_r))
+#     c_guess = 0.5 * (np.max(rho_r) + np.min(rho_r))
+#     R_guess = r_bin_centers[np.argmin(np.abs(rho_r - c_guess))]
+#     xi_guess = 0.3
+#     guess = (R_guess, p0_guess, c_guess, xi_guess)
 
-    # Fit
-    popt, _ = curve_fit(fit_func, r_bin_centers, rho_r, p0=guess)
+#     # Fit
+#     popt, _ = curve_fit(fit_func, r_bin_centers, rho_r, p0=guess)
 
-    return popt, r_bin_centers, rho_r
+#     return popt, r_bin_centers, rho_r
 
-def gyration_tensor(cm,OutArray):
+def get_box(rho):
+    #box = np.stack(np.meshgrid(*[range(L) for L in rho.shape], indexing='ij'), axis=-1)-np.asarray(rho.shape)/2+0.5
+    box = np.moveaxis(np.indices(rho.shape), 0, -1) - np.asarray(rho.shape)/2 + 0.5
+    return box
+
+def droplet_profile(rho):
+    profile = lambda r, R, alpha, rhoh, rhol: rhol+0.5*(rhoh-rhol)*(1+np.tanh((R-np.sqrt(r**2))/(alpha/2)))
+    rs = np.linalg.norm(get_box(rho), axis=-1)
+    p = curve_fit(profile, rs.flatten(), rho.flatten())[0]
+    #R, alpha, rhoh, rhol = p
+    return p
+
+def gyration_tensor(OutArray, cm):
     """
     Calculate the gyration tensor of a 3D array with respect to its center of mass.
 
@@ -249,6 +261,17 @@ def gyration_tensor(cm,OutArray):
     S = np.einsum('ijk,ijk...',OutArray,rr)/np.sum(OutArray)
     return S
 
+def gyration_tensor(rho, cm=(0,0,0)):
+    box = np.array(rho.shape)
+    r = get_box(rho) - cm
+    r -= box*(r/box+np.sign(r)*0.5).astype(int) # minimum image convention
+    S = np.einsum('ijk,ijka,ijkb', rho, r, r)/np.sum(rho)
+    return S
+
+def center_of_mass_us(rho):
+    com = np.einsum('ijk,ijka', rho, get_box(rho))/np.sum(rho)
+    return com
+
 def axial_radii(field, cm = None):
     """
     Calculates the fluctuations in the principal radii of a droplet.
@@ -283,9 +306,9 @@ def axial_radii(field, cm = None):
 
     """
     if cm is None:
-        cm = center_of_mass(field)
+        cm = center_of_mass_us(field)
     
-    gr = gyration_tensor(cm, field) # Calculating the gyration tensor of the droplet
+    gr = gyration_tensor(field, cm) # Calculating the gyration tensor of the droplet
     egr = np.linalg.eigvals(gr) # calculating the unordered eigenvalues of the gyration tensor
     # egr = np.sqrt(egr) # calculating the unordered eigenvalues of the gyration tensor
     da = np.power(egr[0], 1/3)/np.power(np.prod(egr[[1,2]]), 1/6) # calculating the variations in dx
@@ -344,39 +367,42 @@ def droplet_fluctuations(fluctuations, temp = 1e-7):
 
     return [y20, y22]
 
-def sharpen_droplet_interface(profile, dcf = 1/5, int_height = 0, max_val = 1, min_val = 0):
-    """
-    Applies an interface sharpening transformation to an n-dimensional numpy array.
+# def sharpen_droplet_interface(profile, dcf = 1/5, int_height = 0, max_val = 1, min_val = 0):
+#     """
+#     Applies an interface sharpening transformation to an n-dimensional numpy array.
 
-    This function modifies the input array `profile` by adjusting the interface 
-    sharpness based on the `dcf` parameter. The sharpening process ensures that 
-    values are constrained within a specified range, effectively enhancing the 
-    contrast at the interface.
+#     This function modifies the input array `profile` by adjusting the interface 
+#     sharpness based on the `dcf` parameter. The sharpening process ensures that 
+#     values are constrained within a specified range, effectively enhancing the 
+#     contrast at the interface.
 
-    Parameters
-    ----------
-    profile : numpy.ndarray
-        An n-dimensional numpy array representing the scalar field to be sharpened.
-    dcf : float, optional
-        A parameter that controls the strength of the interface sharpening. 
-        Default is 1/5.
-    int_height: float, optional
-        A parameter that identifies the crossover point defining the interface in a phase separated
-        system. Defaults to 0.
+#     Parameters
+#     ----------
+#     profile : numpy.ndarray
+#         An n-dimensional numpy array representing the scalar field to be sharpened.
+#     dcf : float, optional
+#         A parameter that controls the strength of the interface sharpening. 
+#         Default is 1/5.
+#     int_height: float, optional
+#         A parameter that identifies the crossover point defining the interface in a phase separated
+#         system. Defaults to 0.
 
-    Returns
-    -------
-    numpy.ndarray
-        An n-dimensional numpy array after the interface sharpening transformation.
+#     Returns
+#     -------
+#     numpy.ndarray
+#         An n-dimensional numpy array after the interface sharpening transformation.
 
-    Notes
-    -----
-    The transformation is computed as:
-        density_filt = (profile + dcf - 0.5) / (2 * dcf)
-    Follows the method detailed in Equation 9 of https://doi.org/10.1063/5.0249847
-    """
-    density_filt = (profile + dcf - int_height)/(2*dcf)
-    density_filt = np.where(density_filt < max_val, density_filt, max_val)
-    density_filt = np.where(density_filt > min_val, density_filt, min_val)
-    return density_filt
+#     Notes
+#     -----
+#     The transformation is computed as:
+#         density_filt = (profile + dcf - 0.5) / (2 * dcf)
+#     Follows the method detailed in Equation 9 of https://doi.org/10.1063/5.0249847
+#     """
+#     density_filt = (profile + dcf - int_height)/(2*dcf)
+#     density_filt = np.where(density_filt < max_val, density_filt, max_val)
+#     density_filt = np.where(density_filt > min_val, density_filt, min_val)
+#     return density_filt
 
+def sharpen_profile(rho, rhoh=1, rhol=0, d=5/2):
+    rhot = 0.5*(rhoh+rhol)
+    return np.maximum(np.minimum((d*rho+(1-d)*rhot),rhoh),rhol)

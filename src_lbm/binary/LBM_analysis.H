@@ -386,4 +386,27 @@ void conjugate_complex(GpuArray<Real>& real, GpuArray<Real>& imag, GpuArray<Real
 }
 #endif
 
+#if 0
+void roll_fab(MultiFab& ref_mf, int shift = 0, int axis = 0){
+    MultiFab ref_mf_new = MultiFab(ref_mf, make_deep_copy, 0, 1);
+
+    int x_shift, y_shift, z_shift;
+
+    for (MFIter mfi(fold); mfi.isValid(); ++mfi){
+        const Array4<Real>& fOld = fold.array(mfi);
+        ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
+            // x_shift = (ix + shift)%nx if axis == 0 else ix%nx;
+            // y_shift = (iy + shift)%ny if axis == 1 else iy%ny;
+            // z_shift = (iz + shift)%nz if axis == 2 else iz%nz;
+            
+            x_shift = axis == 0 ? (ix + shift)%nx : ix%nx;
+            y_shift = axis == 1 ? (iy + shift)%nx : iy%ny;
+            z_shift = axis == 2 ? (iz + shift)%nx : iz%nz;
+            
+            
+        });
+    }
+}
+#endif
+
 #endif
