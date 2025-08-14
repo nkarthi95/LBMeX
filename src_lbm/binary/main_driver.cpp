@@ -57,8 +57,6 @@ inline void ReadInput() {
 
   /* Droplet properties when using init_cond = 2 (droplet)*/
   pp.query("droplet_radius_prop", droplet_radius_prop);
-  pp.query("rho_in", rho_in);
-  pp.query("rho_out", rho_out);
   pp.query("phi_in", phi_in);
   pp.query("phi_out", phi_out);
 
@@ -202,8 +200,8 @@ void main_driver(const char* argv) {
   // set up StructFact
   int nStructVars = 14;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
-  const Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
-  const Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
+  Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
+  Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
   const Vector<Real> var_scaling(pairA.size(), 1.0);
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
@@ -225,6 +223,10 @@ void main_driver(const char* argv) {
       write_csv(analysis_filePath, col_headers);
       droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
       #endif
+      break;
+    case 3:
+      LBM_init_cylinder(droplet_radius_prop, geom, fold, gold, hydrovs);
+      start_time = 0;
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
