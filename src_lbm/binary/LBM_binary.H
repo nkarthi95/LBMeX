@@ -577,10 +577,10 @@ inline void LBM_init_cylinder(const Real r,
   auto const & g = mg.arrays();
   GpuArray<Real,3> dx = geom.CellSizeArray();
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
+    const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-    const Real rz = z-box[2]/2;
 
-    const Real r = sqrt(ry*ry + rz*rz);
+    const Real r = sqrt(ry*ry + rx*rx);
     const Real phi = A + B*(tanh((R-r)/(alpha/2)));
 
     for (int i=0; i<nvel; i++) {
