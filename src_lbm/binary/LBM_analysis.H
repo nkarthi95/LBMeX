@@ -19,6 +19,8 @@
 MultiFab binarize_droplet(const MultiFab& hydrovars, int comp = 1, Real cutoff = 0.){
     BoxArray ba = hydrovars.boxArray();
     DistributionMapping dm = hydrovars.DistributionMap();
+    const IntVect mf_nghost = hydrovars.nGrowVect();
+
     MultiFab droplet(ba, dm, 1, 0);
     
     droplet.ParallelCopy(hydrovars, comp, 0, 1);
@@ -388,24 +390,21 @@ void conjugate_complex(GpuArray<Real>& real, GpuArray<Real>& imag, GpuArray<Real
 }
 #endif
 
-void roll_fab(MultiFab& mf, const Geometry& geom, const int shift = 0, const int axis = 0){
+void roll_fab(MultiFab& mf, const Geometry& geom, const IntVect offset = {0, 0, 0}){
     BL_PROFILE_VAR("roll_fab()",roll_fab);
-    
-    const Box& dom = geom.Domain();
-    const int dim = geom.Domain().length(axis);
-    const int s = ((shift % dim) + dim) % dim;
-    if (s == 0) return;
+
+    int counter = 0;
+    for(int i = 0; i < AMREX_SPACEDIM; i++){counter += (offset[i] == 0); }
+    if (counter == AMREX_SPACEDIM){return;}
 
     const int ncomp = mf.nComp();
     const BoxArray& ba = mf.boxArray();
     const DistributionMapping& dm = mf.DistributionMap();
+    const IntVect mf_nghost = mf.nGrowVect();
 
-    // Destination MultiFab with the canonical (unshifted) layout
-    MultiFab rolled(ba, dm, ncomp, nghost);
-    IntVect ghost_dims(nghost);
-    IntVect offset(0); offset[axis] = shift;
+    MultiFab rolled(ba, dm, ncomp, mf_nghost);
     Periodicity is_periodic = geom.periodicity();
-    rolled.ParallelCopy(mf, 0, 0, ncomp, ghost_dims, ghost_dims, offset, is_periodic);
+    rolled.ParallelCopy(mf, 0, 0, ncomp, mf_nghost, mf_nghost, offset, is_periodic);
 
     MultiFab::Swap(mf, rolled, 0, 0, ncomp, nghost);
 }

@@ -481,11 +481,13 @@ inline void LBM_timestep(const Geometry& geom,
     GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
     // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
 
+    IntVect offset(0);
     for(int i = 0; i < AMREX_SPACEDIM; i++){
       // const int com_diff = static_cast<int>(com_new[i] - com_ref[i]);
       const int com_diff = static_cast<int>(std::round(com_new[i] - com_ref[i]));
-      roll_fab(reference, geom, com_diff, i);
+      offset[i] = com_diff;
     }
+    roll_fab(reference, geom, offset);
     // Print() << "x:" << diff[0] << ", y:" << diff[1] << ", z:" << diff[2] << "\n";
     
     #if UNCORRELATED_NOISE
