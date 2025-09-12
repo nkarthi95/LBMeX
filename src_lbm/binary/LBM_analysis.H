@@ -406,7 +406,7 @@ void roll_fab(MultiFab& mf, const Geometry& geom, const IntVect offset = {0, 0, 
     Periodicity is_periodic = geom.periodicity();
     rolled.ParallelCopy(mf, 0, 0, ncomp, mf_nghost, mf_nghost, offset, is_periodic);
 
-    MultiFab::Swap(mf, rolled, 0, 0, ncomp, nghost);
+    MultiFab::Swap(mf, rolled, 0, 0, ncomp, mf_nghost);
 }
 
 
