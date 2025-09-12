@@ -14,7 +14,7 @@ AMREX_GPU_MANAGED Real temperature = 1e-7;
 // result is stored in lower triangle of A
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void cholesky_decomp(GpuArray<Real,ndof*ndof>& A, const int n, const int bstart) {
-
+  BL_PROFILE_VAR("cholesky_decomp()",cholesky_decomp);
   #ifdef AMREX_USE_CUDA
     // Cholesky-Banachiewicz algorithm
     Real sum;
@@ -334,12 +334,14 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
 }
 
 // generate real-space noise for all non-conserved moments
-inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
+inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise, const IntVect offset) {
   BL_PROFILE_VAR("generate_fluctuations()",generate_fluctuations);
   const IntVect box = geom.Domain().length();
-  // center of mass correction of reference
-  // MultiFab binarize_droplet_ref = binarize_droplet(hydrovs, 1, 0);
-  // GpuArray<Real, 3> com = center_of_mass(binarize_droplet_ref);
+  const int nx = box[0]; const int ny = box[1]; const int nz = box[2];
+
+  #if ROLL
+    roll_fab(hydrovs, geom, offset);
+  #endif
 
   for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
@@ -353,8 +355,17 @@ inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, Multi
       // while(x_ref < 0) x_ref += box[1];
       // int z_ref = r[2];
       // while(x_ref < 0) x_ref += box[2];
-      const Real rho0 = h(x, y, z, 0);
-      const Real phi0 = h(x, y, z, 1);
+      #if ROLL
+        const Real rho0 = h(x, y, z, 0);
+        const Real phi0 = h(x, y, z, 1);
+      #else
+        const int new_x = (x + offset[0])%nx;
+        const int new_y = (y + offset[1])%ny;
+        const int new_z = (z + offset[2])%nz;
+        const Real rho0 = h(new_x, new_y, new_z, 0);
+        const Real phi0 = h(new_x, new_y, new_z, 1);
+      #endif
+
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
         xi(x,y,z,i) = r[i];
@@ -465,7 +476,7 @@ inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& hydrovs, MultiFab& noise, 
        MultiFab& reference, int curr_step) {
   BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
-  if(temperature == 0.0 or curr_step < fluctuation_start and T < chi/2.){
+  if(temperature == 0.0 or curr_step <= fluctuation_start and T < chi/2.){
     noise.setVal(0.);
     reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
     // Print() << "equilibration";
@@ -473,26 +484,26 @@ inline void LBM_timestep(const Geometry& geom,
   }
   else{
     // Rolling the reference frame to its new location based on com movement
-    MultiFab new_ref = binarize_droplet(hydrovs, 1, 0);
+    MultiFab new_ref = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
     GpuArray<Real, 3> com_new = center_of_mass(new_ref);
     // Print() << "x:" << com_new[0] << ", y:" << com_new[1] << ", z:" << com_new[2] << "\n";
 
-    MultiFab binarize_droplet_ref = binarize_droplet(reference, 1, 0);
+    MultiFab binarize_droplet_ref = binarize_droplet(calculate_C1(reference), 0, 0.5);
     GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
     // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
 
     IntVect offset(0);
     for(int i = 0; i < AMREX_SPACEDIM; i++){
-      // const int com_diff = static_cast<int>(com_new[i] - com_ref[i]);
       const int com_diff = static_cast<int>(std::round(com_new[i] - com_ref[i]));
       offset[i] = com_diff;
     }
-    roll_fab(reference, geom, offset);
+
+    // IntVect offset(1);
     // Print() << "x:" << diff[0] << ", y:" << diff[1] << ", z:" << diff[2] << "\n";
-    
+
     #if UNCORRELATED_NOISE
       // generate_fluctuations(geom, hydrovs, noise);
-      generate_fluctuations(geom, reference, noise);
+      generate_fluctuations(geom, reference, noise, offset);
     #else
       // generate_correlated_fluctuations(geom, hydrovs, noise);
       generate_correlated_fluctuations(geom, reference, noise);

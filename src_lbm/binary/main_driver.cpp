@@ -125,29 +125,25 @@ inline void WriteDists(int step,
 }
 
 #ifndef AMREX_USE_CUDA
-inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 8> data_to_append){
-  for (int i = 0; i < 8; i++){
+inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 7> data_to_append){
+  for (int i = 0; i < data_to_append.len(); i++){
     PrintToFile(analysis_filePath, 0) << data_to_append(i) << ",";
   }
   PrintToFile(analysis_filePath, 0) << "\n";
 }
 
 inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
-  for (int i = 0; i < 8; i++){
+  for (int i = 0; i < data_to_append.size(); i++){
     PrintToFile(analysis_filePath, 0) << data_to_append[i] << ",";
   }
   PrintToFile(analysis_filePath, 0) << "\n";
 }
 
-inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
+inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs){
     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
-    Array1D<Real, 0, 8> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
-    MultiFab::Copy(droplet, hydrovs, 1, 0, 1, 0);
-    // droplet.ParallelCopy(hydrovs, 1, 0, 1);
-    MultiFab::Add(droplet, hydrovs, 0, 0, 1, 0);
-    droplet.mult(0.5, 0);
+    Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
 
-    droplet = binarize_droplet(droplet, 0, 0.5);
+    MultiFab droplet = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
     
     Real R = droplet_radius(droplet);
     // Real R = droplet_radius_profile_fit(droplet);
@@ -194,9 +190,6 @@ void main_driver(const char* argv) {
   reference.setVal(1.0, 0, 1, nghost); // set reference density to a constant value rho = 1.0
   reference.setVal(0., 1, 1, nghost); // set reference order parameter to a constant value phi = 0.0
 
-  // droplet analysis
-  MultiFab droplet(ba, dm, 1, 0);
-
   // set up StructFact
   int nStructVars = 14;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
@@ -221,7 +214,7 @@ void main_driver(const char* argv) {
       #ifndef AMREX_USE_CUDA
       col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
       write_csv(analysis_filePath, col_headers);
-      droplet_analysis(analysis_filePath, start_time, hydrovs, droplet);
+      droplet_analysis(analysis_filePath, start_time, hydrovs);
       #endif
       break;
     case 3:
@@ -230,7 +223,7 @@ void main_driver(const char* argv) {
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
-      reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
+      reference.Copy(reference, hydrovs, 0, 0, 2, nghost); // need 2 ghost cells
       break;
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
@@ -262,7 +255,7 @@ void main_driver(const char* argv) {
       WriteCheckPoint(step, hydrovs);
     }
     #ifndef AMREX_USE_CUDA
-    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(analysis_filePath, step, hydrovs, droplet);}
+    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(analysis_filePath, step, hydrovs);}
     #endif
   }
 

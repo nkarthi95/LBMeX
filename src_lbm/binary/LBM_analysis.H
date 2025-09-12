@@ -16,6 +16,16 @@
 
 #include "LBM_binary.H"
 
+MultiFab calculate_C1(const MultiFab& hydrovars){
+    BoxArray ba = hydrovars.boxArray();
+    DistributionMapping dm = hydrovars.DistributionMap();
+    const IntVect mf_nghost = hydrovars.nGrowVect();
+
+    MultiFab C1(ba, dm, 1, mf_nghost);
+    MultiFab::LinComb(C1, 0.5, hydrovars, 0, 0.5, hydrovars, 1, 0, 1, nghost);
+    return C1;
+}
+
 MultiFab binarize_droplet(const MultiFab& hydrovars, int comp = 1, Real cutoff = 0.){
     BoxArray ba = hydrovars.boxArray();
     DistributionMapping dm = hydrovars.DistributionMap();
