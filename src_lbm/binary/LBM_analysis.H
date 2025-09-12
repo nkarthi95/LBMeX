@@ -10,7 +10,9 @@
 // #include <fftw3.h>
 #endif
 
+#include <AMReX_Periodicity.H>
 #include <math.h>
+#include <stdexcept>
 
 #include "LBM_binary.H"
 
@@ -386,27 +388,41 @@ void conjugate_complex(GpuArray<Real>& real, GpuArray<Real>& imag, GpuArray<Real
 }
 #endif
 
-#if 0
-void roll_fab(MultiFab& ref_mf, int shift = 0, int axis = 0){
-    MultiFab ref_mf_new = MultiFab(ref_mf, make_deep_copy, 0, 1);
+void roll_fab(MultiFab& mf, const Geometry& geom, const int shift = 0, const int axis = 0){
+    BL_PROFILE_VAR("roll_fab()",roll_fab);
+    
+    const Box& dom = geom.Domain();
+    const int dim = geom.Domain().length(axis);
+    const int s = ((shift % dim) + dim) % dim;
+    if (s == 0) return;
 
-    int x_shift, y_shift, z_shift;
+    const int ncomp = mf.nComp();
+    const BoxArray& ba = mf.boxArray();
+    const DistributionMapping& dm = mf.DistributionMap();
 
-    for (MFIter mfi(fold); mfi.isValid(); ++mfi){
-        const Array4<Real>& fOld = fold.array(mfi);
-        ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-            // x_shift = (ix + shift)%nx if axis == 0 else ix%nx;
-            // y_shift = (iy + shift)%ny if axis == 1 else iy%ny;
-            // z_shift = (iz + shift)%nz if axis == 2 else iz%nz;
-            
-            x_shift = axis == 0 ? (ix + shift)%nx : ix%nx;
-            y_shift = axis == 1 ? (iy + shift)%nx : iy%ny;
-            z_shift = axis == 2 ? (iz + shift)%nx : iz%nz;
-            
-            
+    // Destination MultiFab with the canonical (unshifted) layout
+    MultiFab rolled(ba, dm, ncomp, nghost);
+    IntVect ghost_dims(nghost);
+    IntVect offset(0); offset[axis] = shift;
+    Periodicity is_periodic = geom.periodicity();
+    rolled.ParallelCopy(mf, 0, 0, ncomp, ghost_dims, ghost_dims, offset, is_periodic);
+
+    MultiFab::Swap(mf, rolled, 0, 0, ncomp, nghost);
+}
+
+
+// Exponential moving average
+void exponential_moving_average(MultiFab& ref_mf, MultiFab& hydrovs, const Real damping = 0.065){
+    const int ncomp = ref_mf.nComp();
+    
+    for (MFIter mfi(ref_mf,TilingIfNotGPU()); mfi.isValid(); ++mfi){
+        const Box& bx = mfi.tilebox();
+        Array4<Real> const& ref_arr = ref_mf.array(mfi);
+        Array4<Real> const& hyd_arr = hydrovs.array(mfi);
+        ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int x, int y, int z, int i){
+            ref_arr(x,y,z,i) = ref_arr(x,y,z,i)*(1. - damping) + hyd_arr(x,y,z,i)*damping;
         });
     }
 }
-#endif
 
 #endif

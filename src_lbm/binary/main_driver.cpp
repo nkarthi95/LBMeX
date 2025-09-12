@@ -140,6 +140,7 @@ inline void write_csv(const std::string analysis_filePath, std::vector<std::stri
 }
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs, MultiFab& droplet){
+    BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
     Array1D<Real, 0, 8> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
     MultiFab::Copy(droplet, hydrovs, 1, 0, 1, 0);
     // droplet.ParallelCopy(hydrovs, 1, 0, 1);
@@ -174,7 +175,6 @@ void main_driver(const char* argv) {
   IntVect dom_lo(0, 0, 0);
   IntVect dom_hi(domain_size-1);
   Array<int,3> periodicity({1,1,1});
-  int nghost = 2; // need two halo layers for gradients
 
   Box domain(dom_lo, dom_hi);
   Geometry geom(domain, real_box, CoordSys::cartesian, periodicity);

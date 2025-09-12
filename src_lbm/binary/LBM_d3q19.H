@@ -2,7 +2,7 @@
 #define LBM_D3Q19_H_
 
 const int nvel = 19;
-
+const int nghost = 2; // need two halo layers for gradients
 const Real cs2 = 1./3.;
 
 AMREX_GPU_MANAGED IntVect c[19] = {

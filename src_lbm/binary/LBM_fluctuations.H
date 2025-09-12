@@ -336,13 +336,25 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
 // generate real-space noise for all non-conserved moments
 inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
   BL_PROFILE_VAR("generate_fluctuations()",generate_fluctuations);
+  const IntVect box = geom.Domain().length();
+  // center of mass correction of reference
+  // MultiFab binarize_droplet_ref = binarize_droplet(hydrovs, 1, 0);
+  // GpuArray<Real, 3> com = center_of_mass(binarize_droplet_ref);
+
   for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
     const Array4<Real>& xi = noise.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      const Real rho0 = h(x,y,z,0);
-      const Real phi0 = h(x,y,z,1);
+      // IntVect r = static_cast<IntVect>({x,y,z} - com);
+      // int x_ref = r[0];
+      // while(x_ref < 0) x_ref += box[0];
+      // int y_ref = r[1];
+      // while(x_ref < 0) x_ref += box[1];
+      // int z_ref = r[2];
+      // while(x_ref < 0) x_ref += box[2];
+      const Real rho0 = h(x, y, z, 0);
+      const Real phi0 = h(x, y, z, 1);
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
         xi(x,y,z,i) = r[i];
@@ -446,26 +458,6 @@ inline void collide_stream(const Geometry& geom,
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
 }
 
-inline void replace_reference(MultiFab& reference){
-  const Real C1 = 1. - get_phi0(chi, T);
-  const Real C2 = 1. - C1;
-  const Real drho = C1 - C2;
-  
-  const Real xi = get_xi(C1, chi, T, kappa);
-  const Real interface_min = 0.5 - 0.5*drho*tanh(sqrt(2.)/xi);
-  const Real interface_max = 0.5 + 0.5*drho*tanh(sqrt(2.)/xi);
-
-  for (MFIter mfi(reference); mfi.isValid(); ++mfi) {
-    const Array4<Real>& ref = reference.array(mfi);
-    const Box& valid_box = mfi.growntilebox(2);
-    ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {\
-      Real curr_C1 = (ref(x,y,z,0) + ref(x,y,z,1))/2;
-      if (curr_C1 < interface_min){ref(x,y,z,1) = 2.*C2 - 1.;}
-      else if (curr_C1 > interface_max){ref(x,y,z,1) = 2.*C1 - 1;}
-      });
-  }
-}
-
 // LB timestep for whole lattice
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
@@ -475,30 +467,26 @@ inline void LBM_timestep(const Geometry& geom,
   BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
   if(temperature == 0.0 or curr_step < fluctuation_start and T < chi/2.){
     noise.setVal(0.);
-    // MultiFab reference(ba, dm, 2, nghost);
     reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
-    // replace_reference(reference);
     // Print() << "equilibration";
     // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
   }
   else{
-    // Multifab droplet = MultiFab(hydrovs, make_deep_copy, 1, 1);
-
-    // moving the center of mass of the reference state to track the movement of the system
-    #if 0
-    Multifab new_ref(hydrovs, make_deep_copy, 1, 1);
-    new_ref = binarize_droplet(hydrovs, 1, 0);
+    // Rolling the reference frame to its new location based on com movement
+    MultiFab new_ref = binarize_droplet(hydrovs, 1, 0);
     GpuArray<Real, 3> com_new = center_of_mass(new_ref);
+    // Print() << "x:" << com_new[0] << ", y:" << com_new[1] << ", z:" << com_new[2] << "\n";
 
-    Multifab binarize_droplet_ref(reference, make_deep_copy, 1, 1);
-    binarize_droplet_ref = binarize_droplet(binarize_droplet_ref, 1, 0);
+    MultiFab binarize_droplet_ref = binarize_droplet(reference, 1, 0);
     GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
+    // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
 
-    IntVect diff(0);
-    for(int i = 0; i < AMREX_SPACEDIM; i++){diff[i] = static_cast<int>(com_new[i] - com_ref[i]);}
-    Print() << diff[0] << diff[1] << diff[2];
-    reference.shift(diff);
-    #endif
+    for(int i = 0; i < AMREX_SPACEDIM; i++){
+      // const int com_diff = static_cast<int>(com_new[i] - com_ref[i]);
+      const int com_diff = static_cast<int>(std::round(com_new[i] - com_ref[i]));
+      roll_fab(reference, geom, com_diff, i);
+    }
+    // Print() << "x:" << diff[0] << ", y:" << diff[1] << ", z:" << diff[2] << "\n";
     
     #if UNCORRELATED_NOISE
       // generate_fluctuations(geom, hydrovs, noise);
