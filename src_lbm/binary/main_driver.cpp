@@ -126,17 +126,20 @@ inline void WriteDists(int step,
 
 #ifndef AMREX_USE_CUDA
 inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 7> data_to_append){
+  auto out = PrintToFile(analysis_filePath, 0);
+  out.SetPrecision(14);
   for (int i = 0; i < data_to_append.len(); i++){
-    PrintToFile(analysis_filePath, 0) << data_to_append(i) << ",";
+    out << data_to_append(i) << ",";
   }
-  PrintToFile(analysis_filePath, 0) << "\n";
+  out << "\n";
 }
 
 inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
+  auto out = PrintToFile(analysis_filePath, 0);
   for (int i = 0; i < data_to_append.size(); i++){
-    PrintToFile(analysis_filePath, 0) << data_to_append[i] << ",";
+    out << data_to_append[i] << ",";
   }
-  PrintToFile(analysis_filePath, 0) << "\n";
+  out << "\n";
 }
 
 inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs){
@@ -155,6 +158,7 @@ inline void droplet_analysis(const std::string analysis_filePath, const int step
     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
     write_csv(analysis_filePath, droplet_data);
+    // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
 }
 #endif
 
@@ -240,6 +244,7 @@ void main_driver(const char* argv) {
 
   // TIMESTEP
   for (int step=start_time; step <= nsteps; ++step) {
+    Print() << step << std::endl;
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
     structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {

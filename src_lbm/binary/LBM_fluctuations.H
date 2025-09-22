@@ -359,9 +359,9 @@ inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, Multi
         const Real rho0 = h(x, y, z, 0);
         const Real phi0 = h(x, y, z, 1);
       #else
-        const int new_x = (x + offset[0])%nx;
-        const int new_y = (y + offset[1])%ny;
-        const int new_z = (z + offset[2])%nz;
+        const int new_x = (x - offset[0])%nx;
+        const int new_y = (y - offset[1])%ny;
+        const int new_z = (z - offset[2])%nz;
         const Real rho0 = h(new_x, new_y, new_z, 0);
         const Real phi0 = h(new_x, new_y, new_z, 1);
       #endif
@@ -483,22 +483,24 @@ inline void LBM_timestep(const Geometry& geom,
     // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
   }
   else{
-    // Rolling the reference frame to its new location based on com movement
-    MultiFab new_ref = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
-    GpuArray<Real, 3> com_new = center_of_mass(new_ref);
-    // Print() << "x:" << com_new[0] << ", y:" << com_new[1] << ", z:" << com_new[2] << "\n";
+    #if BENCHMARK
+      IntVect offset(1);
+    #else  
+      // Rolling the reference frame to its new location based on com movement
+      MultiFab new_ref = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
+      GpuArray<Real, 3> com_new = center_of_mass(new_ref);
+      // Print() << "x:" << com_new[0] << ", y:" << com_new[1] << ", z:" << com_new[2] << "\n";
 
-    MultiFab binarize_droplet_ref = binarize_droplet(calculate_C1(reference), 0, 0.5);
-    GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
-    // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
-
-    IntVect offset(0);
-    for(int i = 0; i < AMREX_SPACEDIM; i++){
-      const int com_diff = static_cast<int>(std::round(com_new[i] - com_ref[i]));
-      offset[i] = com_diff;
-    }
-
-    // IntVect offset(1);
+      MultiFab binarize_droplet_ref = binarize_droplet(calculate_C1(reference), 0, 0.5);
+      GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
+      // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
+      const IntVect box = geom.Domain().length();
+      IntVect offset(0);
+      for(int i = 0; i < AMREX_SPACEDIM; i++){
+        const int com_diff = static_cast<int>(std::round((com_new[i] - com_ref[i])))%box[i];
+        offset[i] = com_diff;
+      }
+    #endif
     // Print() << "x:" << diff[0] << ", y:" << diff[1] << ", z:" << diff[2] << "\n";
 
     #if UNCORRELATED_NOISE

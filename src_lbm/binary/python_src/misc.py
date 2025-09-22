@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
+import itertools
 
 def moving_average(data, window_size):
     """
@@ -24,19 +25,42 @@ def moving_average(data, window_size):
     pad = np.full(window_size - 1, result[0])
     return np.concatenate((pad, result))
 
-def msd_with_time_lag_1d(in_arr, window_sz=10, time_int=1):
-    out = np.zeros(window_sz)
-    counts = np.zeros(window_sz)
-    times = np.arange(window_sz) * time_int
+def calculate_msd(times, x_cm, lag_length):
+    """
+    Calculate mean square displacement (MSD) from a 1D trajectory with optional lag averaging.
 
-    for j in range(window_sz):
-        for i in range(in_arr.size - j):
-            sq_diff = (in_arr[i + j] - in_arr[i]) ** 2
-            out[j] += sq_diff
-            counts[j] += 1
+    Parameters:
+    - time: array-like
+    - x_cm: array-like, position values over time.
+    - max_lag: int or None, maximum lag (τ) to compute. Default is N/2.
 
-    out /= counts
-    return times, out
+    Returns:
+    - lags: array of lag times (in same units as `time` if provided).
+    - msd: numpy array of MSD values.
+    """
+
+    if isinstance(times, list):
+        times = np.array(times)
+    if isinstance(x_cm, list):
+        x_cm = np.array(x_cm)
+
+    N = x_cm.size
+    dt = times[1] - times[0]
+    msd = np.zeros(lag_length)
+    lags = np.arange(1, lag_length + 1) * dt
+
+    for tau in range(1, lag_length + 1):
+        # Calculate squared displacements for each time lag
+        # (x_cm[i + tau] - x_cm[i])**2 for all possible i
+        displacements_squared = (x_cm[tau:] - x_cm[:-tau])**2
+        msd[tau - 1] = np.mean(displacements_squared)
+
+    return lags, msd
+
+def wrap(cood, boxDim):
+    rs = np.diff(list(itertools.combinations(cood, 2)), axis=1).squeeze()
+    rs -= boxDim*np.floor(rs/boxDim+0.5) # PBC
+    return rs
 
 def animate_colormap(data, axs_labels=None, times=None, c_label=None, interval=50, sz=5, cm='bwr'):
     """
