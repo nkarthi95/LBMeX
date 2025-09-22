@@ -1,43 +1,43 @@
 # box parameters
-nx = 32
-ny = 32
-nz = 32
+nx = 128
+ny = 128
+nz = 128
 
 # box mpi decomposition parameters
-max_grid_size_x = 16
-max_grid_size_y = 16
-max_grid_size_z = 16
+max_grid_size_x = 64
+max_grid_size_y = 64
+max_grid_size_z = 64
 
 # system setup
-init_cond = 3
+init_cond = 2
 # only for mixed system (init_cond = 0)
 C1 = 0.5
 # only for droplet and cylinder system (init_cond = 2 or 3)
-droplet_radius_prop = 0.15
+droplet_radius_prop = 0.0625
 phi_in = 0.0
 phi_out = 0.0
 
 # timestepping options
-nsteps = 2000
-plot_int = 1000
+nsteps = 100000
+plot_int = 2000
 n_checkpoint = 0
 restore_string = 0
-fluctuation_start = 0
+fluctuation_start = 100
 distribution_int = 1
 
 # output parameters
 dump_start = 0
-dump_SF = 1
+dump_SF = 0
 dump_hydro = 1
-analysis_int = 0
+analysis_int = 1
 analysis_file = "droplet_analysis.csv"
 nvars_dump = 2
 dump_distribution = 0
 
 # model parameters
-chi = 0.1
-T = 0.04
-kappa = 0.01
+chi = 0.2
+T = 0.095
+kappa = 0.001
 gamma = 1.0
 
 # fluctuations

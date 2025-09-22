@@ -167,7 +167,7 @@ def swift_critical_sigma(rho, chi, T, kappa):
     phi0 = np.sqrt(beta/2/gamma*(Tc-T))
     sigma = 4/3*np.sqrt(kappa*gamma)*phi0**3
     alpha = np.sqrt(2*kappa/gamma)/phi0
-    return sigma, alpha
+    return phi0, sigma, alpha
 
 def fit_swift_phi0(chi):
     """
