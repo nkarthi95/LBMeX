@@ -59,6 +59,8 @@ inline void ReadInput() {
   pp.query("droplet_radius_prop", droplet_radius_prop);
   pp.query("phi_in", phi_in);
   pp.query("phi_out", phi_out);
+  // pp.query("rho_in", rho_in);
+  // pp.query("rho_out", rho_out);
 
   /* time stepping */
   pp.query("nsteps", nsteps);
@@ -244,7 +246,6 @@ void main_driver(const char* argv) {
 
   // TIMESTEP
   for (int step=start_time; step <= nsteps; ++step) {
-    Print() << step << std::endl;
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
     structFact.FortStructure(hydrovs);
     if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {

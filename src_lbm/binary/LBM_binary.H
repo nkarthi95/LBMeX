@@ -22,6 +22,8 @@ AMREX_GPU_MANAGED int fluctuation_start = 0;
 AMREX_GPU_MANAGED Real C1 = 0.5;
 AMREX_GPU_MANAGED Real phi_in = 0.0;
 AMREX_GPU_MANAGED Real phi_out = 0.0;
+// AMREX_GPU_MANAGED Real rho_in = 1.0;
+// AMREX_GPU_MANAGED Real rho_out = 1.0;
 
 // thermodynamic model coexistence phi0
 inline Real get_phi0(Real chi, Real T){
@@ -513,20 +515,28 @@ inline void LBM_init_droplet(const Real r,
 			     MultiFab& mg,
 			     MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
-  const Real R = r*box[0];
+  const Real V_box = static_cast<Real>(box[0]*box[1]*box[2]);
 
-  const Real rho = 1.0;
-  const GpuArray<Real, 3> params = get_thermodynamic_params(rho, chi, T, kappa); //phi0, sigma, alpha
+  const Real R = r*box[0];
+  const Real V_sph = 4./3.*M_PI*pow(R, 3);
+
+  // const Real rho_out = 1.0;
+  const GpuArray<Real, 3> params = get_thermodynamic_params(1.0, chi, T, kappa); //phi0, sigma, alpha
   const Real& alpha = params[2];
+  const Real drho = params[1]*R/2;
+  const Real rho_out = (V_box - V_sph*drho)/V_box;
+  const Real rho_in = rho_out + drho;
+
+  // Print() << drho << "\n";
+  // const Real rho_in = rho_out + drho;
+  Print() << "rho_in:" << rho_in << ", rho_out:" << rho_out << "\n";
   Real A, B;
-  if (phi_in > 0.0 && phi_out < 0.0) {
-      A = (phi_in + phi_out)/2.; // difference between high and low values
-      B = (phi_in - phi_out)/2.; // mean of high and low values
+  if (phi_in == 0.0 && phi_out == 0.0){
+      phi_in = params[0];
+      phi_out = -params[0]*0.98; // This value seems to work. Not really sure why. 
   }
-  else{
-    B = params[0];
-    A = 0.0;
-  }
+  A = (phi_in + phi_out)/2.; // difference between high and low values
+  B = (phi_in - phi_out)/2.; // mean of high and low values
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
@@ -542,8 +552,10 @@ inline void LBM_init_droplet(const Real r,
     #endif
         const Real r = sqrt(r2);
         const Real phi = A + B*(tanh((R-r)/(alpha/2)));
+        const Real rho = phi>0 ? rho_in : rho_out;
 
         for (int i=0; i<nvel; i++) {
+          // condition ? expression_if_true : expression_if_false;
           f[nbx](x,y,z,i) = w[i]*rho;
           g[nbx](x,y,z,i) = w[i]*phi;
         }
