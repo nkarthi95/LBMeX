@@ -22,8 +22,8 @@ AMREX_GPU_MANAGED int fluctuation_start = 0;
 AMREX_GPU_MANAGED Real C1 = 0.5;
 AMREX_GPU_MANAGED Real phi_in = 0.0;
 AMREX_GPU_MANAGED Real phi_out = 0.0;
-// AMREX_GPU_MANAGED Real rho_in = 1.0;
-// AMREX_GPU_MANAGED Real rho_out = 1.0;
+AMREX_GPU_MANAGED Real rho_in = 1.0;
+AMREX_GPU_MANAGED Real rho_out = 1.0;
 
 // thermodynamic model coexistence phi0
 inline Real get_phi0(Real chi, Real T){
@@ -522,21 +522,25 @@ inline void LBM_init_droplet(const Real r,
 
   // const Real rho_out = 1.0;
   const GpuArray<Real, 3> params = get_thermodynamic_params(1.0, chi, T, kappa); //phi0, sigma, alpha
+  // Print() << "phi0:" << params[0] << ", sigma:" << params[1] << ", alpha:" << params[2] << std::endl;
   const Real& alpha = params[2];
-  const Real drho = params[1]*R/2;
-  const Real rho_out = (V_box - V_sph*drho)/V_box;
-  const Real rho_in = rho_out + drho;
 
-  // Print() << drho << "\n";
-  // const Real rho_in = rho_out + drho;
-  Print() << "rho_in:" << rho_in << ", rho_out:" << rho_out << "\n";
   Real A, B;
   if (phi_in == 0.0 && phi_out == 0.0){
-      phi_in = params[0];
-      phi_out = -params[0]*0.98; // This value seems to work. Not really sure why. 
+      // values picked after some trial and error to minimize equilibration time
+      phi_in = params[0]*1.02; 
+      phi_out = -params[0]*0.98; 
   }
+  Print() << "phi_in:" << phi_in << ", rho_out:" << phi_out << std::endl;
   A = (phi_in + phi_out)/2.; // difference between high and low values
   B = (phi_in - phi_out)/2.; // mean of high and low values
+
+  if (rho_in == 1.0 && rho_out == 1.0){
+    const Real drho = (2.*params[1])/(R*(cs2 + T));
+    rho_out = (V_box - V_sph*drho)/V_box;
+    rho_in = rho_out + drho;
+  }
+  Print() << "rho_in:" << rho_in << ", rho_out:" << rho_out << std::endl;
 
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
