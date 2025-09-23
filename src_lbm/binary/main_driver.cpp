@@ -25,12 +25,10 @@ IntVect max_box_size(32);
 int nsteps = 10;
 int checkpoint_int = nsteps;
 int start_time = 0;
-int dump_SF = 0;
-int dump_hydro = 1;
 int dump_start = 0;
-int dump_distribution = 0;
 // int plot_int = nsteps;
 int distribution_int = nsteps;
+int SF_int = 0;
 
 std::string analysis_filePath = "droplet_analysis.csv";
 int analysis_int = 10;
@@ -64,20 +62,18 @@ inline void ReadInput() {
 
   /* time stepping */
   pp.query("nsteps", nsteps);
-  pp.query("plot_int", plot_int);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
   pp.query("fluctuation_start", fluctuation_start);
-  pp.query("distribution_int", distribution_int);
 
   /* output parameters */
-  pp.query("dump_distribution", dump_distribution);
+  pp.query("nvars_dump", nvars_dump);
   pp.query("dump_start", dump_start);
-  pp.query("dump_SF", dump_SF);
-  pp.query("dump_hydro", dump_hydro);
+  pp.query("plot_int", plot_int);
+  pp.query("SF_int", SF_int);
+  pp.query("distribution_int", distribution_int);
   pp.query("analysis_int", analysis_int);
   pp.query("analysis_file", analysis_filePath);
-  pp.query("nvars_dump", nvars_dump);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -91,17 +87,35 @@ inline void ReadInput() {
   pp.dumpTable(amrex::OutStream(), true);
 }
 
-inline void WriteOutput(int step,
-      const Geometry& geom,
-			const MultiFab& hydrovs,
-      StructFact& structFact) {
-  // set up variable names for output
-  const int zero_avg = 1;
+// inline void WriteOutput(int step,
+//       const Geometry& geom,
+// 			const MultiFab& hydrovs,
+//       StructFact& structFact) {
+//   // set up variable names for output
+//   const int zero_avg = 1;
+//   const int nvars = nvars_dump;
+//   const Vector<std::string> var_names = hydrovars_names(nvars);
+//   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
+//   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
+//   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
+// }
+
+inline void WriteHydrovars(int step, const Geometry& geom, const MultiFab& hydrovs){
   const int nvars = nvars_dump;
   const Vector<std::string> var_names = hydrovars_names(nvars);
   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
-  if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
-  if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
+  WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
+  // if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
+}
+
+inline void WriteSF(int step, StructFact& structFact){
+  // const int nvars = nvars_dump;
+  // const Vector<std::string> var_names = hydrovars_names(nvars);
+  // const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
+  // if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
+  const int zero_avg = 1;
+  structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);
+  // if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
 }
 
 inline void WriteDists(int step,
@@ -234,7 +248,8 @@ void main_driver(const char* argv) {
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
   }
-  if (plot_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
+  // if (plot_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
+  if (plot_int > 0) WriteHydrovars(start_time, geom, hydrovs);
   if (checkpoint_int > 0) WriteCheckPoint(start_time, hydrovs); start_time++;
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
@@ -248,12 +263,22 @@ void main_driver(const char* argv) {
   for (int step=start_time; step <= nsteps; ++step) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
     structFact.FortStructure(hydrovs);
-    if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
-      WriteOutput(step, geom, hydrovs, structFact);
+
+    if (plot_int > 0 && step%plot_int == 0 && step >= dump_start){
+      WriteHydrovars(step, geom, hydrovs);
       Print() << "LB step " << step << std::endl;
     }
     
-    if(dump_distribution > 0 && step%distribution_int == 0 && step >= dump_start){
+    if (SF_int > 0 && step%SF_int == 0 && step >= dump_start){
+      WriteSF(step, structFact);
+    }
+
+    // if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
+    //   WriteOutput(step, geom, hydrovs, structFact);
+    //   Print() << "LB step " << step << std::endl;
+    // }
+    
+    if(distribution_int > 0 && step%distribution_int == 0 && step >= dump_start){
         WriteDists(step, geom, fold, gold);
     }
 
