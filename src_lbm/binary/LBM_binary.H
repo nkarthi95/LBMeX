@@ -6,24 +6,26 @@
 const int ncons = 2 + AMREX_SPACEDIM; // number of conserved variables (2 scalar fields + velocity)
 const int ndof = 2*nvel; // number of degrees of freedom
 
-AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
-AMREX_GPU_MANAGED Real tau_p = 1.0;
-AMREX_GPU_MANAGED Real chi = 0.4;
-AMREX_GPU_MANAGED Real T = 0.25;
-
-AMREX_GPU_MANAGED Real kappa = 0.01;
-
-AMREX_GPU_MANAGED Real Gamma = 1.0;
-
+/*Default initial conditions*/
 AMREX_GPU_MANAGED int init_cond = 0;
 AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
-AMREX_GPU_MANAGED int fluctuation_start = 0;
-
 AMREX_GPU_MANAGED Real C1 = 0.5;
 AMREX_GPU_MANAGED Real phi_in = 0.0;
 AMREX_GPU_MANAGED Real phi_out = 0.0;
 AMREX_GPU_MANAGED Real rho_in = 1.0;
 AMREX_GPU_MANAGED Real rho_out = 1.0;
+
+// time stepping
+AMREX_GPU_MANAGED int fluctuation_start = 0;
+
+/* binary fluid parameters */
+AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
+AMREX_GPU_MANAGED Real tau_p = 1.0;
+
+AMREX_GPU_MANAGED Real chi = 0.2;
+AMREX_GPU_MANAGED Real T = 0.095;
+AMREX_GPU_MANAGED Real kappa = 0.01;
+AMREX_GPU_MANAGED Real Gamma = 1.0;
 
 // thermodynamic model coexistence phi0
 inline Real get_phi0(Real chi, Real T){

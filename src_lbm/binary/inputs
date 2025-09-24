@@ -13,14 +13,14 @@ init_cond = 2
 # only for mixed system (init_cond = 0)
 C1 = 0.5
 # only for droplet and cylinder system (init_cond = 2 or 3)
-droplet_radius_prop = 0.101
-phi_in = 0.40155
-phi_out = -0.33822
-rho_in = 1.000057
-rho_out = 1.00003
+droplet_radius_prop = 0.1011
+phi_in = 0.395
+phi_out = -0.338
+rho_in = 1.0
+rho_out = 1.0
 
 # timestepping options
-nsteps = 100000
+nsteps = 20000
 n_checkpoint = 0
 restore_string = 0
 fluctuation_start = 100
@@ -28,11 +28,12 @@ fluctuation_start = 100
 # output parameters
 nvars_dump = 2
 dump_start = 0
-plot_int = 10000
+hydrovars_int = 1000
 SF_int = 0
 distribution_int = 0
-analysis_int = 100
+analysis_int = 10
 analysis_file = "droplet_analysis.csv"
+page_hold = 1000
 
 # model parameters
 chi = 0.2

@@ -21,19 +21,30 @@ using namespace amrex;
 IntVect domain_size(16);
 IntVect max_box_size(32);
 
-// default time stepping parameters
+/* Default initial conditions all in LBM_binary.H */
+
+// time stepping
 int nsteps = 10;
 int checkpoint_int = nsteps;
 int start_time = 0;
-int dump_start = 0;
-// int plot_int = nsteps;
-int distribution_int = nsteps;
-int SF_int = 0;
+// fluctuation_start in LBM_binary.H
 
-std::string analysis_filePath = "droplet_analysis.csv";
-int analysis_int = 10;
-std::vector<std::string> col_headers;
+// output parameters
 int nvars_dump = 2;
+int dump_start = 0;
+int hydrovars_int = nsteps;
+int SF_int = 0;
+int distribution_int = 0;
+int analysis_int = 0;
+std::string analysis_filePath = "droplet_analysis.csv";
+std::vector<std::string> col_headers;
+int page_hold = 1000;
+
+// default time stepping parameters
+
+/* binary fluid parameter defaults in LBM_binary.H */
+
+/* fluctuations parameter defaults in LBM_fluctuations.H */
 
 inline void ReadInput() {
   ParmParse pp;
@@ -48,12 +59,11 @@ inline void ReadInput() {
   max_box_size[2] = max_box_size[1] = max_box_size[0]; // default to same maxSize in all directions
   pp.query("max_grid_size_y", max_box_size[1]);
   pp.query("max_grid_size_z", max_box_size[2]);
-  pp.query("init_cond", init_cond);
   
-  /* Proportion of C1 in system. Only used for init_cond = 0 (mixed system)*/
-  pp.query("C1", C1);
-
-  /* Droplet properties when using init_cond = 2 (droplet)*/
+  // Initial condition setup
+  pp.query("init_cond", init_cond);
+  pp.query("C1", C1); // Proportion of C1 in system. Only used for init_cond = 0 (mixed system)
+  // Droplet properties when using init_cond = 2(droplet), 3(cylinder)
   pp.query("droplet_radius_prop", droplet_radius_prop);
   pp.query("phi_in", phi_in);
   pp.query("phi_out", phi_out);
@@ -69,11 +79,12 @@ inline void ReadInput() {
   /* output parameters */
   pp.query("nvars_dump", nvars_dump);
   pp.query("dump_start", dump_start);
-  pp.query("plot_int", plot_int);
+  pp.query("hydrovars_int", hydrovars_int);
   pp.query("SF_int", SF_int);
   pp.query("distribution_int", distribution_int);
   pp.query("analysis_int", analysis_int);
   pp.query("analysis_file", analysis_filePath);
+  pp.query("page_hold", page_hold);
 
   /* binary fluid parameters */
   pp.query("chi", chi);
@@ -81,24 +92,11 @@ inline void ReadInput() {
   pp.query("kappa", kappa);
   pp.query("gamma", Gamma);
 
-  /* noise parameters */
+  /* fluctuations parameters*/
   pp.query("temperature", temperature);
   // pp.dumpTable()
-  pp.dumpTable(amrex::OutStream(), true);
+  // pp.dumpTable(amrex::OutStream(), true);
 }
-
-// inline void WriteOutput(int step,
-//       const Geometry& geom,
-// 			const MultiFab& hydrovs,
-//       StructFact& structFact) {
-//   // set up variable names for output
-//   const int zero_avg = 1;
-//   const int nvars = nvars_dump;
-//   const Vector<std::string> var_names = hydrovars_names(nvars);
-//   const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
-//   if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
-//   if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
-// }
 
 inline void WriteHydrovars(int step, const Geometry& geom, const MultiFab& hydrovs){
   const int nvars = nvars_dump;
@@ -141,42 +139,6 @@ inline void WriteDists(int step,
 }
 
 #ifndef AMREX_USE_CUDA
-// inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 7> data_to_append){
-//   auto out = PrintToFile(analysis_filePath, 0);
-//   out.SetPrecision(14);
-//   for (int i = 0; i < data_to_append.len(); i++){
-//     out << data_to_append(i) << ",";
-//   }
-//   out << "\n";
-// }
-
-// inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
-//   auto out = PrintToFile(analysis_filePath, 0);
-//   for (int i = 0; i < data_to_append.size(); i++){
-//     out << data_to_append[i] << ",";
-//   }
-//   out << "\n";
-// }
-
-// inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs){
-//     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
-//     Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
-
-//     MultiFab droplet = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
-    
-//     Real R = droplet_radius(droplet);
-//     // Real R = droplet_radius_profile_fit(droplet);
-//     // Print() << R << "\n";
-//     GpuArray<Real, 3> com = center_of_mass(droplet);
-//     GpuArray<Real, 3> dr = axial_radii(droplet);
-//     droplet_data(0) = step;
-//     droplet_data(1) = R;
-//     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
-//     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
-//     write_csv(analysis_filePath, droplet_data);
-//     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
-// }
-
 inline void write_csv(PrintToFile& AMReX_printObj, Array1D<Real, 0, 7> data_to_append){
   for (int i = 0; i < data_to_append.len(); i++){
     AMReX_printObj << data_to_append(i) << ",";
@@ -209,6 +171,41 @@ inline void droplet_analysis(PrintToFile& AMReX_printObj, const int step, const 
     write_csv(AMReX_printObj, droplet_data);
     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
 }
+
+// inline void add_to_string(std::string& output_str, std::vector<std::string> data_to_append){
+//   for (int i = 0; i < data_to_append.size(); i++){
+//     output_str += data_to_append[i] + ",";
+//   }
+//   output_str += "\n";
+//   return output_str;
+// }
+
+// inline void add_to_string(std::string& output_str, Array1D<Real, 0, 7> data_to_append){
+//   for (int i = 0; i < data_to_append.len(); i++){
+//     output_str += static_cast<std::string>(data_to_append(i)) + ",";
+//   }
+//   output_str += "\n";
+//   return output_str;
+// }
+
+// inline void droplet_analysis(std::string& output_str, const int step, const MultiFab& hydrovs){
+//     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
+//     Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
+
+//     MultiFab droplet = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
+    
+//     Real R = droplet_radius(droplet);
+//     // Real R = droplet_radius_profile_fit(droplet);
+//     // Print() << R << "\n";
+//     GpuArray<Real, 3> com = center_of_mass(droplet);
+//     GpuArray<Real, 3> dr = axial_radii(droplet);
+//     droplet_data(0) = step;
+//     droplet_data(1) = R;
+//     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
+//     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
+//     write_csv(output_str, droplet_data);
+//     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
+// }
 #endif
 
 void main_driver(const char* argv) {
@@ -287,8 +284,8 @@ void main_driver(const char* argv) {
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
   }
-  // if (plot_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
-  if (plot_int > 0) WriteHydrovars(start_time, geom, hydrovs);
+  // if (hydrovars_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
+  if (hydrovars_int > 0) WriteHydrovars(start_time, geom, hydrovs);
   if (checkpoint_int > 0) WriteCheckPoint(start_time, hydrovs); start_time++;
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
@@ -303,7 +300,7 @@ void main_driver(const char* argv) {
     LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
     structFact.FortStructure(hydrovs);
 
-    if (plot_int > 0 && step%plot_int == 0 && step >= dump_start){
+    if (hydrovars_int > 0 && step%hydrovars_int == 0 && step >= dump_start){
       WriteHydrovars(step, geom, hydrovs);
       Print() << "LB step " << step << std::endl;
     }
@@ -320,8 +317,9 @@ void main_driver(const char* argv) {
       WriteCheckPoint(step, hydrovs);
     }
     #ifndef AMREX_USE_CUDA
+    // if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(droplet_properties_output, step, hydrovs);}
     if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(*droplet_properties_output, step, hydrovs);}
-    if (analysis_int > 0 && step%1000 == 0) {
+    if (analysis_int > 0 && step%page_hold == 0) {
       droplet_properties_output.reset();
       droplet_properties_output = std::make_unique<PrintToFile>(analysis_filePath, 0);
       droplet_properties_output->SetPrecision(14);
