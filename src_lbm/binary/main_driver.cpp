@@ -141,24 +141,57 @@ inline void WriteDists(int step,
 }
 
 #ifndef AMREX_USE_CUDA
-inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 7> data_to_append){
-  auto out = PrintToFile(analysis_filePath, 0);
-  out.SetPrecision(14);
+// inline void write_csv(const std::string analysis_filePath, Array1D<Real, 0, 7> data_to_append){
+//   auto out = PrintToFile(analysis_filePath, 0);
+//   out.SetPrecision(14);
+//   for (int i = 0; i < data_to_append.len(); i++){
+//     out << data_to_append(i) << ",";
+//   }
+//   out << "\n";
+// }
+
+// inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
+//   auto out = PrintToFile(analysis_filePath, 0);
+//   for (int i = 0; i < data_to_append.size(); i++){
+//     out << data_to_append[i] << ",";
+//   }
+//   out << "\n";
+// }
+
+// inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs){
+//     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
+//     Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
+
+//     MultiFab droplet = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
+    
+//     Real R = droplet_radius(droplet);
+//     // Real R = droplet_radius_profile_fit(droplet);
+//     // Print() << R << "\n";
+//     GpuArray<Real, 3> com = center_of_mass(droplet);
+//     GpuArray<Real, 3> dr = axial_radii(droplet);
+//     droplet_data(0) = step;
+//     droplet_data(1) = R;
+//     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
+//     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
+//     write_csv(analysis_filePath, droplet_data);
+//     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
+// }
+
+inline void write_csv(PrintToFile& AMReX_printObj, Array1D<Real, 0, 7> data_to_append){
   for (int i = 0; i < data_to_append.len(); i++){
-    out << data_to_append(i) << ",";
+    AMReX_printObj << data_to_append(i) << ",";
   }
-  out << "\n";
+  AMReX_printObj << std::endl;
 }
 
-inline void write_csv(const std::string analysis_filePath, std::vector<std::string> data_to_append){
-  auto out = PrintToFile(analysis_filePath, 0);
+inline void write_csv(PrintToFile& AMReX_printObj, std::vector<std::string> data_to_append){
   for (int i = 0; i < data_to_append.size(); i++){
-    out << data_to_append[i] << ",";
+    AMReX_printObj << data_to_append[i] << ",";
   }
-  out << "\n";
+  AMReX_printObj << std::endl;
 }
 
-inline void droplet_analysis(const std::string analysis_filePath, const int step, const MultiFab& hydrovs){
+inline void droplet_analysis(PrintToFile& AMReX_printObj, const int step, const MultiFab& hydrovs){
     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
     Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
 
@@ -173,7 +206,7 @@ inline void droplet_analysis(const std::string analysis_filePath, const int step
     droplet_data(1) = R;
     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
-    write_csv(analysis_filePath, droplet_data);
+    write_csv(AMReX_printObj, droplet_data);
     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
 }
 #endif
@@ -218,6 +251,12 @@ void main_driver(const char* argv) {
   const Vector<Real> var_scaling(pairA.size(), 1.0);
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
+  static std::unique_ptr<PrintToFile> droplet_properties_output;
+  if (!droplet_properties_output) {
+    droplet_properties_output = std::make_unique<PrintToFile>(analysis_filePath, 0);
+    droplet_properties_output->SetPrecision(14);
+  }
+
   // INITIALIZE
   switch(init_cond){
     case 0:
@@ -233,8 +272,8 @@ void main_driver(const char* argv) {
       start_time = 0;
       #ifndef AMREX_USE_CUDA
       col_headers = {"Timestep", "Radius", "cx", "cy", "cz", "dx", "dy", "dz"};
-      write_csv(analysis_filePath, col_headers);
-      droplet_analysis(analysis_filePath, start_time, hydrovs);
+      write_csv(*droplet_properties_output, col_headers);
+      droplet_analysis(*droplet_properties_output, start_time, hydrovs);
       #endif
       break;
     case 3:
@@ -273,11 +312,6 @@ void main_driver(const char* argv) {
       WriteSF(step, structFact);
     }
 
-    // if (plot_int > 0 && step%plot_int == 0 && step >= dump_start) {
-    //   WriteOutput(step, geom, hydrovs, structFact);
-    //   Print() << "LB step " << step << std::endl;
-    // }
-    
     if(distribution_int > 0 && step%distribution_int == 0 && step >= dump_start){
         WriteDists(step, geom, fold, gold);
     }
@@ -286,7 +320,12 @@ void main_driver(const char* argv) {
       WriteCheckPoint(step, hydrovs);
     }
     #ifndef AMREX_USE_CUDA
-    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(analysis_filePath, step, hydrovs);}
+    if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(*droplet_properties_output, step, hydrovs);}
+    if (analysis_int > 0 && step%1000 == 0) {
+      droplet_properties_output.reset();
+      droplet_properties_output = std::make_unique<PrintToFile>(analysis_filePath, 0);
+      droplet_properties_output->SetPrecision(14);
+      }
     #endif
   }
 
