@@ -1,6 +1,6 @@
 import numpy as np
 
-def spherically_averaged_structure_factor(data, thermo_model, scale_factor = 1, func = None, shift = True, cs = True):
+def spherically_averaged_structure_factor(data, shift = True):
 
     """
     Calculates the spherically averaged structure factor for volumetric data.
@@ -12,20 +12,8 @@ def spherically_averaged_structure_factor(data, thermo_model, scale_factor = 1, 
     data : numpy.ndarray
         A 3D or 2D array containing the volumetric structure factor data. For 3D data, the function expects a 3D array, while for 2D data, a 2D array is accepted.
 
-    thermo_model : object
-        A custom thermodynamic model class instance that defines the thermodynamic equation of state, providing methods like `cs2k` or `mu_ck` for the k-dependent parameters. This model is used to adjust the structure factor based on thermodynamic properties.
-
-    scale_factor : float, optional
-        A factor by which the data is divided to scale the structure factor. The default value is `1`.
-
-    func : callable, optional
-        A lambda function for rescaling the data, which should take the data and the k-dependent values as input. The default value is `None`.
-
     shift : bool, optional
         A boolean that controls whether the 0-point of the Fourier transform is at the center (`True`) or the left (`False`). The default value is `True`.
-
-    cs : bool, optional
-        A boolean that determines whether the k-dependent parameter is calculated using `cs2k` (`True`) or `mu_ck` (`False`). The default value is `True`.
 
     Returns
     -------
@@ -37,15 +25,12 @@ def spherically_averaged_structure_factor(data, thermo_model, scale_factor = 1, 
     Examples
     --------
     >>> data = np.random.random((64, 64, 64))  # Example 3D structure factor data
-    >>> thermo_model = CustomThermoModel()  # Your custom thermodynamic model
     >>> k, S = spherically_averaged_structure_factor(data, thermo_model, scale_factor=1, shift=True, cs=True)
 
     Notes
     -----
     - The function calculates the spherically averaged structure factor by computing the k-values and structure factor values over spherical shells in k-space.
-    - The `scale_factor` and `func` parameters allow for flexible scaling and rescaling of the structure factor.
     - The `shift` parameter controls whether the Fourier transform centers the zero-frequency component in the middle or at the left of the data.
-    - The thermodynamic model (`thermo_model`) must provide functions like `cs2k` or `mu_ck`, which return k-dependent values needed for rescaling the structure factor.
 
     References
     ----------
@@ -57,6 +42,7 @@ def spherically_averaged_structure_factor(data, thermo_model, scale_factor = 1, 
         freqs = np.fft.fftshift(np.fft.fftfreq(L))
     else:
         freqs = np.fft.fftfreq(L)
+
     if len(data.shape) == 3:
         kx, ky, kz = np.meshgrid(*tuple([2*np.pi*freqs for L in [L, L, L]]), indexing='ij')
         k = np.stack([kx, ky, kz], axis = -1)
@@ -65,16 +51,6 @@ def spherically_averaged_structure_factor(data, thermo_model, scale_factor = 1, 
         k = np.stack([kx, ky], axis = -1)
      
     k1 = np.linalg.norm(k, axis=-1).flatten()
-    
-    if func is not None:
-        if cs:
-            S = func(S, thermo_model.cs2k(kx, ky, kz))
-        else:
-            S = func(S, thermo_model.mu_ck(kx, ky, kz))
-    S /= scale_factor
-
-    # test[slc] /= test.sum()
-    # S[L//2, L//2, L//2] /= S.sum()
 
     S1 = S.flatten()
     kmin = 2*np.pi/L # sampling frequency
@@ -180,7 +156,7 @@ def sph2cart(azimuth,elevation,r):
     z = r * np.sin(elevation)
     return x, y, z
 
-def radial_equilibration(data, thermo_model, radius = 1, scale_factor = 1, func = None, cs = True):
+def radial_equilibration(data, radius = 1):
     """
     Calculates the radial average of the input data at the same radius.
 
@@ -236,14 +212,6 @@ def radial_equilibration(data, thermo_model, radius = 1, scale_factor = 1, func 
     kx, ky, kz = np.meshgrid(*tuple([2*np.pi*freqs for L in [L, L, L]]), indexing='ij')
 
     r, t, p = cart2sph(kx, ky, kz)
-
-    if func is not None:
-        if cs:
-            S = func(S, thermo_model.cs2k(kx, ky, kz))
-        else:
-            S = func(S, thermo_model.mu_ck(kx, ky, kz))
-    S /= scale_factor
-    # S[L//2, L//2, L//2] /= S.sum()
     
     idxs = np.isclose(r, radius, atol = 2*np.pi/L)
     t = t[idxs]

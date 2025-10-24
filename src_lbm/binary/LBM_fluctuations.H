@@ -333,38 +333,20 @@ GpuArray<Real,ndof> uncorrelated_noise(const Real rho0, const Real phi0, const R
   return xi;
 }
 
+
 // generate real-space noise for all non-conserved moments
-inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise, const IntVect offset) {
+inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, MultiFab& noise) {
   BL_PROFILE_VAR("generate_fluctuations()",generate_fluctuations);
   const IntVect box = geom.Domain().length();
   const int nx = box[0]; const int ny = box[1]; const int nz = box[2];
-
-  #if ROLL
-    roll_fab(hydrovs, geom, offset);
-  #endif
 
   for (MFIter mfi(noise); mfi.isValid(); ++mfi) {
     const Box& box = mfi.validbox();
     const Array4<Real>& xi = noise.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      // IntVect r = static_cast<IntVect>({x,y,z} - com);
-      // int x_ref = r[0];
-      // while(x_ref < 0) x_ref += box[0];
-      // int y_ref = r[1];
-      // while(x_ref < 0) x_ref += box[1];
-      // int z_ref = r[2];
-      // while(x_ref < 0) x_ref += box[2];
-      #if ROLL
-        const Real rho0 = h(x, y, z, 0);
-        const Real phi0 = h(x, y, z, 1);
-      #else
-        const int new_x = (x - offset[0])%nx;
-        const int new_y = (y - offset[1])%ny;
-        const int new_z = (z - offset[2])%nz;
-        const Real rho0 = h(new_x, new_y, new_z, 0);
-        const Real phi0 = h(new_x, new_y, new_z, 1);
-      #endif
+      const Real rho0 = h(x, y, z, 0);
+      const Real phi0 = h(x, y, z, 1);
 
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
@@ -485,7 +467,7 @@ inline void LBM_timestep(const Geometry& geom,
   else{
     #if BENCHMARK
       IntVect offset(1);
-    #else  
+    #else
       // Rolling the reference frame to its new location based on com movement
       MultiFab new_ref = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
       GpuArray<Real, 3> com_new = center_of_mass(new_ref);
@@ -500,14 +482,16 @@ inline void LBM_timestep(const Geometry& geom,
         const int com_diff = static_cast<int>(std::round((com_new[i] - com_ref[i])))%box[i];
         offset[i] = com_diff;
       }
+      // IntVect offset(0);
     #endif
-    // Print() << "x:" << diff[0] << ", y:" << diff[1] << ", z:" << diff[2] << "\n";
+    // Print() << "x:" << offset[0] << ", y:" << offset[1] << ", z:" << offset[2] << "\n";
 
     #if UNCORRELATED_NOISE
-      // generate_fluctuations(geom, hydrovs, noise);
-      generate_fluctuations(geom, reference, noise, offset);
+      roll_fab(reference, geom, offset);
+      generate_fluctuations(geom, reference, noise);
     #else
       // generate_correlated_fluctuations(geom, hydrovs, noise);
+      roll_fab(reference, geom, offset);
       generate_correlated_fluctuations(geom, reference, noise);
     #endif
   }
