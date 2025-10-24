@@ -451,6 +451,7 @@ inline void collide_stream(const Geometry& geom,
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
 }
 
+#if FIXREF
 // LB timestep for whole lattice
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
@@ -498,5 +499,27 @@ inline void LBM_timestep(const Geometry& geom,
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
   hydrovars(fold, gold, hydrovs);
 }
+#else
+// LB timestep for whole lattice
+inline void LBM_timestep(const Geometry& geom,
+			 MultiFab& fold, MultiFab& gold,
+			 MultiFab& fnew, MultiFab& gnew,
+			 MultiFab& hydrovs, MultiFab& noise, 
+       int curr_step) {
+  BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
+  if(temperature == 0.0 or curr_step <= fluctuation_start){
+    noise.setVal(0.);
+  }
+  else{
+    #if UNCORRELATED_NOISE
+      generate_fluctuations(geom, hydrovs, noise);
+    #else
+      generate_correlated_fluctuations(geom, hydrovs, noise);
+    #endif
+  }
+  collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
+  hydrovars(fold, gold, hydrovs);
+}
+#endif
 
 #endif
