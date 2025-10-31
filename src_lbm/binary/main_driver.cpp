@@ -243,7 +243,7 @@ void main_driver(const char* argv) {
   #endif
 
   // set up StructFact
-  int nStructVars = 14;
+  int nStructVars = 38;
   const Vector<std::string> var_names = hydrovars_names(nStructVars);
   Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
   Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
