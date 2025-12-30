@@ -171,41 +171,6 @@ inline void droplet_analysis(PrintToFile& AMReX_printObj, const int step, const 
     write_csv(AMReX_printObj, droplet_data);
     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
 }
-
-// inline void add_to_string(std::string& output_str, std::vector<std::string> data_to_append){
-//   for (int i = 0; i < data_to_append.size(); i++){
-//     output_str += data_to_append[i] + ",";
-//   }
-//   output_str += "\n";
-//   return output_str;
-// }
-
-// inline void add_to_string(std::string& output_str, Array1D<Real, 0, 7> data_to_append){
-//   for (int i = 0; i < data_to_append.len(); i++){
-//     output_str += static_cast<std::string>(data_to_append(i)) + ",";
-//   }
-//   output_str += "\n";
-//   return output_str;
-// }
-
-// inline void droplet_analysis(std::string& output_str, const int step, const MultiFab& hydrovs){
-//     BL_PROFILE_VAR("droplet_analysis()",droplet_analysis);
-//     Array1D<Real, 0, 7> droplet_data; //"Timestep, Radius, com_x, com_y, com_z, dx, dy, dz\n" 
-
-//     MultiFab droplet = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
-    
-//     Real R = droplet_radius(droplet);
-//     // Real R = droplet_radius_profile_fit(droplet);
-//     // Print() << R << "\n";
-//     GpuArray<Real, 3> com = center_of_mass(droplet);
-//     GpuArray<Real, 3> dr = axial_radii(droplet);
-//     droplet_data(0) = step;
-//     droplet_data(1) = R;
-//     droplet_data(2) = com[0]; droplet_data(3) = com[1]; droplet_data(4) = com[2];
-//     droplet_data(5) = dr[0]; droplet_data(6) = dr[1]; droplet_data(7) = dr[2];
-//     write_csv(output_str, droplet_data);
-//     // Print() << "step:" << step << ", R:" << R << ", com_x:" << com[0] << ", com_y:" << com[1] << ", com_z:" << com[2] << "\n";
-// }
 #endif
 
 void main_driver(const char* argv) {
@@ -243,10 +208,9 @@ void main_driver(const char* argv) {
   #endif
 
   // set up StructFact
-  int nStructVars = 38;
-  const Vector<std::string> var_names = hydrovars_names(nStructVars);
-  Vector<int> pairA(nStructVars); std::iota(pairA.begin(), pairA.end(), 0); // idxs = [0, 1, ..., N-1]
-  Vector<int> pairB(nStructVars); std::iota(pairB.begin(), pairB.end(), 0); // idxs = [0, 1, ..., N-1]
+  const Vector<std::string> var_names = hydrovars_names(ndof);
+  Vector<int> pairA(ndof); std::iota(pairA.begin(), pairA.end(), 0); pairA.emplace_back(1); // idxs = [0, 1, ..., N-1, 1]
+  Vector<int> pairB(ndof); std::iota(pairB.begin(), pairB.end(), 0); pairB.emplace_back(0); // idxs = [0, 1, ..., N-1, 0]
   const Vector<Real> var_scaling(pairA.size(), 1.0);
   StructFact structFact(ba, dm, var_names, var_scaling, pairA, pairB);
 
@@ -325,7 +289,6 @@ void main_driver(const char* argv) {
       WriteCheckPoint(step, hydrovs);
     }
     #ifndef AMREX_USE_CUDA
-    // if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(droplet_properties_output, step, hydrovs);}
     if (analysis_int > 0 && step%analysis_int == 0){droplet_analysis(*droplet_properties_output, step, hydrovs);}
     if (analysis_int > 0 && step%page_hold == 0) {
       droplet_properties_output.reset();
