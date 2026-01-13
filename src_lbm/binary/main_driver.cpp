@@ -69,6 +69,8 @@ inline void ReadInput() {
   pp.query("phi_out", phi_out);
   pp.query("rho_in", rho_in);
   pp.query("rho_out", rho_out);
+  pp.query("tau_r", tau_r);
+  pp.query("tau_p", tau_p);
 
   /* time stepping */
   pp.query("nsteps", nsteps);

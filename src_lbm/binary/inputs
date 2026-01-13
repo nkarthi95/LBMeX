@@ -18,6 +18,8 @@ phi_in = 0.395
 phi_out = -0.338
 rho_in = 1.0
 rho_out = 1.0
+tau_r = 1.0
+tau_p = 1.0
 
 # timestepping options
 nsteps = 20000
