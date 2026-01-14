@@ -9,8 +9,8 @@ max_grid_size_y = 32
 max_grid_size_z = 16
 
 # system setup
-init_cond = 0
-droplet_radius_prop = 0.202 # only for droplet system
+init_cond = 2
+droplet_radius_prop = 0.3 # only for droplet system
 C1_in = 0.5 # used in init_cond = mixture, droplet and cylinder
 # For init_cond = mixture, controls proportion of C1 in mixture
 C1_out = 0.5 # used in init_cond = droplet and cylinder
@@ -28,13 +28,10 @@ fluctuation_start = 100
 
 # output parameters
 nvars_dump = 2
-dump_start = 4000
-hydrovars_int = 0
-SF_int = 1000
+dump_start = 0
+hydrovars_int = 1000
+SF_int = 0
 distribution_int = 0
-analysis_int = 0
-analysis_file = "droplet_analysis.csv"
-page_hold = 1000
 
 # model parameters
 chi = 0.2
@@ -43,4 +40,4 @@ kappa = 0.01
 gamma = 1.0
 
 # fluctuations
-temperature = 1e-5
+temperature = 0
