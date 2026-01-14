@@ -13,7 +13,6 @@ using namespace amrex;
 #include "LBM_IO.H"
 
 #ifndef AMREX_USE_CUDA
-#include "LBM_analysis.H"
 #include "LBM_tests.H"
 #endif
 

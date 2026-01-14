@@ -4,7 +4,6 @@
 #include <AMReX_FFT.H>
 #include <lapack.h>
 
-#include "LBM_analysis.H"
 #include "LBM_binary.H"
 // #include "LBM_tests.H"
 
