@@ -93,46 +93,6 @@ inline void ReadInput() {
   // pp.dumpTable(amrex::OutStream(), true);
 }
 
-inline void WriteHydrovars(int step, const Geometry& geom, const MultiFab& hydrovs){
-  const int nvars = nvars_dump;
-  const Vector<std::string> var_names = hydrovars_names(nvars);
-  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
-  WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
-  // if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
-}
-
-inline void WriteSF(int step, StructFact& structFact){
-  // const int nvars = nvars_dump;
-  // const Vector<std::string> var_names = hydrovars_names(nvars);
-  // const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
-  // if (dump_hydro) {WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);}
-  const int zero_avg = 1;
-  structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);
-  // if (dump_SF) {structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);}
-}
-
-inline void WriteDists(int step,
-                       const Geometry& geom,
-                       const MultiFab& f,
-                       const MultiFab& g) {
-    std::string pltfile;
-    Vector<std::string> var_names(nvel);
-
-    // f distribution
-    pltfile = amrex::Concatenate("dist_f",step,9);
-    for (int i = 0; i < nvel; i++) {
-      var_names[i] = "f" + std::to_string(i);
-    }
-    WriteSingleLevelPlotfile(pltfile, f, var_names, geom, Real(step), step);
-    
-    // g distribution
-    pltfile = amrex::Concatenate("dist_g",step,9);
-    for (int i = 0; i < nvel; i++) {
-      var_names[i] = "g" + std::to_string(i);
-    }
-    WriteSingleLevelPlotfile(pltfile, g, var_names, geom, Real(step), step);
-}
-
 void main_driver(const char* argv) {
 
   // store the current time so we can later compute total run time.
@@ -193,7 +153,7 @@ void main_driver(const char* argv) {
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
   }
   // if (hydrovars_int > 0) WriteOutput(start_time, geom, hydrovs, structFact);
-  if (hydrovars_int > 0) WriteHydrovars(start_time, geom, hydrovs);
+  if (hydrovars_int > 0) WriteHydrovars(start_time, geom, hydrovs, nvars_dump);
   if (checkpoint_int > 0) WriteCheckPoint(start_time, hydrovs); start_time++;
   Print() << "LB initialized lattice " << domain <<"\n" << ba << dm << std::endl;
 
@@ -209,7 +169,7 @@ void main_driver(const char* argv) {
     structFact.FortStructure(hydrovs);
 
     if (hydrovars_int > 0 && step%hydrovars_int == 0 && step >= dump_start){
-      WriteHydrovars(step, geom, hydrovs);
+      WriteHydrovars(step, geom, hydrovs, nvars_dump);
       Print() << "LB step " << step << std::endl;
     }
     

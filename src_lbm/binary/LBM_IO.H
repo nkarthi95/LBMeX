@@ -12,6 +12,41 @@ using namespace std::chrono;
 
 #include "LBM_d3q19.H"
 
+// Data output
+inline void WriteHydrovars(int step, const Geometry& geom, const MultiFab& hydrovs, const int& nvars){
+  const Vector<std::string> var_names = hydrovars_names(nvars);
+  const std::string& pltfile = amrex::Concatenate("hydro_plt",step,9);
+  WriteSingleLevelPlotfile(pltfile, hydrovs, var_names, geom, Real(step), step);
+}
+
+inline void WriteSF(int step, StructFact& structFact){
+  const int zero_avg = 1;
+  structFact.WritePlotFile(step, static_cast<Real>(step), "SF_plt", zero_avg);
+}
+
+inline void WriteDists(int step,
+                       const Geometry& geom,
+                       const MultiFab& f,
+                       const MultiFab& g) {
+    std::string pltfile;
+    Vector<std::string> var_names(nvel);
+
+    // f distribution
+    pltfile = amrex::Concatenate("dist_f",step,9);
+    for (int i = 0; i < nvel; i++) {
+      var_names[i] = "f" + std::to_string(i);
+    }
+    WriteSingleLevelPlotfile(pltfile, f, var_names, geom, Real(step), step);
+    
+    // g distribution
+    pltfile = amrex::Concatenate("dist_g",step,9);
+    for (int i = 0; i < nvel; i++) {
+      var_names[i] = "g" + std::to_string(i);
+    }
+    WriteSingleLevelPlotfile(pltfile, g, var_names, geom, Real(step), step);
+}
+
+// Checkpointing
 namespace {
     void GotoNextLine (std::istream& is)
     {
