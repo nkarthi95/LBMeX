@@ -7,6 +7,10 @@
 #include "LBM_binary.H"
 // #include "LBM_tests.H"
 
+/// temperature : Noise temperature used in the fluctuating hydrodynamics model.
+/// Sets the amplitude of stochastic forcing terms. A value of zero disables
+/// thermal fluctuations; small nonzero values introduce controlled noise.
+/// This parameter is typically activated after `fluctuation_start`.
 AMREX_GPU_MANAGED Real temperature = 1e-7;
 
 // Cholesky decomposition of matrix A

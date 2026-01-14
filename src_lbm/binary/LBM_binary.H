@@ -4,28 +4,79 @@
 #include "LBM_d3q19.H"
 #include <cassert>
 
-const int ncons = 2 + AMREX_SPACEDIM; // number of conserved variables (2 scalar fields + velocity)
-const int ndof = 2*nvel; // number of degrees of freedom
+/// Number of conserved variables in the system.
+/// Consists of two scalar fields (e.g., densities or order parameters)
+/// plus AMREX_SPACEDIM velocity components.
+const int ncons = 2 + AMREX_SPACEDIM;
 
-/*Default initial conditions*/
+/// Number of degrees of freedom.
+/// Defined as twice the number of velocity degrees of freedom.
+const int ndof = 2 * nvel;
+
+/** \name Initial condition parameters */
+///@{
+
+/// init_cond : Initial condition selector.
+///   0 = Homogeneous mixture
+///   1 = Flat interface in the yz-plane
+///   2 = Spherical droplet of component C1 at domain center
+///   3 = Cylindrical region of C1 with axis aligned along z
 AMREX_GPU_MANAGED int init_cond = 0;
+
+/// droplet_radius_prop : Radius of droplet as a fraction of the domain size.
+/// Used for droplet and cylindrical initial conditions.
 AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
+
+/// C1_in : Concentration of component C1 inside the droplet, cylinder or single grid point.
 AMREX_GPU_MANAGED Real C1_in = 0.5;
+
+/// C2_in : Concentration of component C2 inside the droplet, cylinder or single grid point.
 AMREX_GPU_MANAGED Real C2_in = 0.5;
+
+/// C1_out : Concentration of component C1 outside the droplet or cylinder.
 AMREX_GPU_MANAGED Real C1_out = 0.5;
+
+/// C2_out : Concentration of component C2 outside the droplet or cylinder.
 AMREX_GPU_MANAGED Real C2_out = 0.5;
 
-// time stepping
+///@}
+
+/** \name Time stepping parameters */
+///@{
+
+/// fluctuation_start : Timestep at which thermal fluctuations are enabled.
+/// For timesteps less than this value, fluctuations are disabled.
 AMREX_GPU_MANAGED int fluctuation_start = 0;
 
-/* binary fluid parameters */
-AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129; // tau=0.5*(1.+1./sqrt(3.)) minimizes spurious currents according to Swift et al.
+///@}
+
+/** \name Binary fluid model parameters */
+///@{
+
+/// tau_r : Relaxation time for order parameter dynamics.
+/// The default value
+///   tau = 0.5 * (1 + 1 / sqrt(3))
+/// minimizes spurious currents, following Swift et al.
+AMREX_GPU_MANAGED Real tau_r = 0.7886751345948129;
+
+/// tau_p : Relaxation time for momentum (hydrodynamic) modes.
 AMREX_GPU_MANAGED Real tau_p = 1.0;
 
+/// chi : Flory–Huggins interaction parameter controlling phase separation.
 AMREX_GPU_MANAGED Real chi = 0.2;
+
+/// T : Thermodynamic temperature appearing in the free-energy functional.
 AMREX_GPU_MANAGED Real T = 0.095;
+
+/// kappa : Gradient energy coefficient controlling interfacial width
+/// and surface tension.
 AMREX_GPU_MANAGED Real kappa = 0.01;
+
+/// Gamma : Mobility or coupling coefficient in the binary fluid model.
 AMREX_GPU_MANAGED Real Gamma = 1.0;
+
+///@}
+
 
 inline GpuArray<Real,3> get_thermodynamic_params(const Real rho, const Real chi, const Real T, const Real kappa){
   GpuArray<Real,3> out;

@@ -16,81 +16,155 @@ using namespace amrex;
 #include "LBM_tests.H"
 #endif
 
-// default grid parameters
+/// Default grid parameters.
+// domain_size : Number of cells in each spatial direction.
+/// max_box_size : Maximum box size for AMReX grid decomposition.
 IntVect domain_size(16);
 IntVect max_box_size(32);
 
-/* Default initial conditions all in LBM_binary.H */
-
-// time stepping
+/// Default time stepping parameters.
+/// nsteps          : Total number of timesteps to run.
+/// checkpoint_int  : Interval (in timesteps) between checkpoint outputs.
+/// start_time      : Restart time index (used when restoring from checkpoint).
 int nsteps = 10;
 int checkpoint_int = nsteps;
 int start_time = 0;
-// fluctuation_start in LBM_binary.H
 
-// output parameters
+/// Default output parameters.
+/// nvars_dump        : Number of variables written to plotfiles.
+/// dump_start        : Timestep at which plotfile output begins.
+/// hydrovars_int     : Interval for writing hydrodynamic variables.
+/// SF_int            : Interval for writing structure factor data (0 disables).
+/// distribution_int  : Interval for writing distribution functions (0 disables).
 int nvars_dump = 2;
 int dump_start = 0;
 int hydrovars_int = nsteps;
 int SF_int = 0;
 int distribution_int = 0;
-// default time stepping parameters
 
+
+
+// fluctuation_start in LBM_binary.H
 /* binary fluid parameter defaults in LBM_binary.H */
-
+/* Default initial conditions all in LBM_binary.H */
 /* fluctuations parameter defaults in LBM_fluctuations.H */
 
-inline void ReadInput() {
+/**
+ * \brief Read runtime parameters from the input file.
+ *
+ * This function uses AMReX ParmParse to read simulation parameters
+ * from the input file and override default values. Parameters are
+ * grouped into grid setup, initial conditions, time stepping,
+ * output control, binary fluid physics, and fluctuation settings.
+ *
+ * All parameters are optional; if a parameter is not found in the
+ * input file, its default value remains unchanged.
+ */
+inline void ReadInput()
+{
   ParmParse pp;
 
-  /* grid parameters */
+  /** \name Grid parameters */
+  ///@{
+
+  /// nx : Number of cells in the x-direction.
+  /// ny : Number of cells in the y-direction (defaults to nx).
+  /// nz : Number of cells in the z-direction (defaults to nx).
   pp.query("nx", domain_size[0]);
-  domain_size[2] = domain_size[1] = domain_size[0]; // default to cubic box
+  domain_size[2] = domain_size[1] = domain_size[0]; // default cubic domain
   pp.query("ny", domain_size[1]);
   pp.query("nz", domain_size[2]);
 
+  /// max_grid_size_x : Maximum box size in the x-direction.
+  /// max_grid_size_y : Maximum box size in the y-direction (defaults to x).
+  /// max_grid_size_z : Maximum box size in the z-direction (defaults to x).
   pp.query("max_grid_size_x", max_box_size[0]);
-  max_box_size[2] = max_box_size[1] = max_box_size[0]; // default to same maxSize in all directions
+  max_box_size[2] = max_box_size[1] = max_box_size[0]; // uniform max box size
   pp.query("max_grid_size_y", max_box_size[1]);
   pp.query("max_grid_size_z", max_box_size[2]);
-  
-  // Initial condition setup
+
+  ///@}
+
+  /** \name Initial condition parameters */
+  ///@{
+
+  /// init_cond : Initial condition selector.
+  ///   0 = Homogeneous mixture
+  ///   1 = Flat interface in the yz-plane
+  ///   2 = Spherical droplet of C1 at domain center
+  ///   3 = Cylindrical C1 region aligned with z-axis
   pp.query("init_cond", init_cond);
-  // init_cond = 0: mixture
-  // init_cond = 1: flat interface in yz plane
-  // init_cond = 2: Droplet of C1 in the center of the box
-  // init_cond = 3: Cylinder of C1 whose axis is in the z-direction
+
+  /// droplet_radius_prop : Droplet radius as a fraction of domain size.
   pp.query("droplet_radius_prop", droplet_radius_prop);
-  pp.query("C1_in", C1_in); // used for init_cond = 0, 2, 3
-  pp.query("C1_out", C1_out); // used for init_cond = 2, 3
-  pp.query("C2_in", C2_in); // used for init_cond = 0, 2, 3
-  pp.query("C2_out", C2_out); // used for init_cond = 2, 3
+
+  /// C1_in  : Concentration of component C1 inside droplet/region.
+  /// C1_out : Concentration of component C1 outside droplet/region.
+  /// C2_in  : Concentration of component C2 inside droplet/region.
+  /// C2_out : Concentration of component C2 outside droplet/region.
+  pp.query("C1_in", C1_in);
+  pp.query("C1_out", C1_out);
+  pp.query("C2_in", C2_in);
+  pp.query("C2_out", C2_out);
+
+  /// tau_r : Relaxation time for order parameter dynamics.
+  /// tau_p : Relaxation time for momentum dynamics.
   pp.query("tau_r", tau_r);
   pp.query("tau_p", tau_p);
 
-  /* time stepping */
+  ///@}
+
+  /** \name Time stepping parameters */
+  ///@{
+
+  /// nsteps            : Total number of timesteps.
+  /// n_checkpoint      : Interval between checkpoint writes.
+  /// restore_string    : Restart timestep index.
+  /// fluctuation_start : Timestep at which thermal fluctuations are enabled.
   pp.query("nsteps", nsteps);
   pp.query("n_checkpoint", checkpoint_int);
   pp.query("restore_string", start_time);
   pp.query("fluctuation_start", fluctuation_start);
 
-  /* output parameters */
+  ///@}
+
+  /** \name Output control parameters */
+  ///@{
+
+  /// nvars_dump        : Number of fields written to plotfiles.
+  /// dump_start        : Timestep to begin plotfile output.
+  /// hydrovars_int     : Interval for hydrodynamic variable output.
+  /// SF_int            : Interval for structure factor output.
+  /// distribution_int  : Interval for distribution function output.
   pp.query("nvars_dump", nvars_dump);
   pp.query("dump_start", dump_start);
   pp.query("hydrovars_int", hydrovars_int);
   pp.query("SF_int", SF_int);
   pp.query("distribution_int", distribution_int);
 
-  /* binary fluid parameters */
+  ///@}
+
+  /** \name Binary fluid parameters */
+  ///@{
+
+  /// chi   : Flory–Huggins interaction parameter.
+  /// T     : Thermodynamic temperature.
+  /// kappa : Gradient energy coefficient.
+  /// gamma : Mobility or coupling parameter.
   pp.query("chi", chi);
   pp.query("T", T);
   pp.query("kappa", kappa);
   pp.query("gamma", Gamma);
 
-  /* fluctuations parameters*/
+  ///@}
+
+  /** \name Fluctuation parameters */
+  ///@{
+
+  /// temperature : Noise temperature used in fluctuating hydrodynamics.
   pp.query("temperature", temperature);
-  // pp.dumpTable()
-  // pp.dumpTable(amrex::OutStream(), true);
+
+  ///@}
 }
 
 void main_driver(const char* argv) {
