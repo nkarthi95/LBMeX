@@ -345,9 +345,15 @@ inline void generate_fluctuations(const Geometry& geom, MultiFab& hydrovs, Multi
     const Array4<Real>& xi = noise.array(mfi);
     const Array4<Real>& h = hydrovs.array(mfi);
     ParallelForRNG(box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      const Real rho0 = h(x, y, z, 0);
-      const Real phi0 = h(x, y, z, 1);
-
+      Real rho0, phi0;
+      if (init_cond == 0 && chi/T < 2.0){
+        rho0 = 1.0;
+        phi0 = 0.0;
+      }
+      else{
+        rho0 = h(x, y, z, 0);
+        phi0 = h(x, y, z, 1);
+      }
       GpuArray<Real,ndof> r = uncorrelated_noise(rho0,phi0,engine);
       for (int i=0; i<ndof; ++i) {
         xi(x,y,z,i) = r[i];
@@ -451,55 +457,6 @@ inline void collide_stream(const Geometry& geom,
   MultiFab::Swap(gold, gnew, 0, 0, nvel, 0);
 }
 
-#if FIXREF
-// LB timestep for whole lattice
-inline void LBM_timestep(const Geometry& geom,
-			 MultiFab& fold, MultiFab& gold,
-			 MultiFab& fnew, MultiFab& gnew,
-			 MultiFab& hydrovs, MultiFab& noise, 
-       MultiFab& reference, int curr_step) {
-  BL_PROFILE_VAR("LBM_timestep()",LBM_timestep);
-  if(temperature == 0.0 or curr_step <= fluctuation_start and T < chi/2.){
-    noise.setVal(0.);
-    reference.Copy(reference, hydrovs, 0, 0, 2, 2); // need 2 ghost cells
-    // Print() << "equilibration";
-    // (MultiFab &dst, const MultiFab &src, int srccomp, int dstcomp, int numcomp, const IntVect &nghost)
-  }
-  else{
-    #if BENCHMARK
-      IntVect offset(1);
-    #else
-      // Rolling the reference frame to its new location based on com movement
-      MultiFab new_ref = binarize_droplet(calculate_C1(hydrovs), 0, 0.5);
-      GpuArray<Real, 3> com_new = center_of_mass(new_ref);
-      // Print() << "x:" << com_new[0] << ", y:" << com_new[1] << ", z:" << com_new[2] << "\n";
-
-      MultiFab binarize_droplet_ref = binarize_droplet(calculate_C1(reference), 0, 0.5);
-      GpuArray<Real, 3> com_ref = center_of_mass(binarize_droplet_ref);
-      // Print() << "x:" << com_ref[0] << ", y:" << com_ref[1] << ", z:" << com_ref[2] << "\n";
-      const IntVect box = geom.Domain().length();
-      IntVect offset(0);
-      for(int i = 0; i < AMREX_SPACEDIM; i++){
-        const int com_diff = static_cast<int>(std::round((com_new[i] - com_ref[i])))%box[i];
-        offset[i] = com_diff;
-      }
-      // IntVect offset(0);
-    #endif
-    // Print() << "x:" << offset[0] << ", y:" << offset[1] << ", z:" << offset[2] << "\n";
-
-    #if UNCORRELATED_NOISE
-      roll_fab(reference, geom, offset);
-      generate_fluctuations(geom, reference, noise);
-    #else
-      // generate_correlated_fluctuations(geom, hydrovs, noise);
-      roll_fab(reference, geom, offset);
-      generate_correlated_fluctuations(geom, reference, noise);
-    #endif
-  }
-  collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
-  hydrovars(fold, gold, hydrovs);
-}
-#else
 // LB timestep for whole lattice
 inline void LBM_timestep(const Geometry& geom,
 			 MultiFab& fold, MultiFab& gold,
@@ -520,6 +477,4 @@ inline void LBM_timestep(const Geometry& geom,
   collide_stream(geom, fold, gold, fnew, gnew, hydrovs, noise);
   hydrovars(fold, gold, hydrovs);
 }
-#endif
-
 #endif

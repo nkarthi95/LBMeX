@@ -21,16 +21,16 @@ tau_r = 1.0
 tau_p = 1.0
 
 # timestepping options
-nsteps = 10000
+nsteps = 5000
 n_checkpoint = 0
 restore_string = 0
-fluctuation_start = 0
+fluctuation_start = 100
 
 # output parameters
 nvars_dump = 2
-dump_start = 0
-hydrovars_int = 1000
-SF_int = 0
+dump_start = 4000
+hydrovars_int = 0
+SF_int = 1000
 distribution_int = 0
 analysis_int = 0
 analysis_file = "droplet_analysis.csv"
@@ -43,4 +43,4 @@ kappa = 0.01
 gamma = 1.0
 
 # fluctuations
-temperature = 0
+temperature = 1e-5

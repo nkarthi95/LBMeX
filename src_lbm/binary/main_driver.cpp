@@ -204,14 +204,8 @@ void main_driver(const char* argv) {
   MultiFab gnew(ba, dm, nvel, nghost);
   MultiFab hydrovs(ba, dm, 2*nvel, nghost);
   MultiFab noise(ba, dm, 2*nvel, nghost);
-  MultiFab test_noise(ba, dm, 2*nvel, nghost);
-  #if FIXREF
-  MultiFab reference(ba, dm, 2, nghost);
-  reference.setVal(1.0, 0, 1, nghost); // set reference density to a constant value rho = 1.0
-  reference.setVal(0., 1, 1, nghost); // set reference order parameter to a constant value phi = 0.0
-  #endif
 
-  // set up StructFact
+  // set up StructFactF
   const Vector<std::string> var_names = hydrovars_names(ndof);
   Vector<int> pairA(ndof); std::iota(pairA.begin(), pairA.end(), 0); pairA.emplace_back(1); // idxs = [0, 1, ..., N-1, 1]
   Vector<int> pairB(ndof); std::iota(pairB.begin(), pairB.end(), 0); pairB.emplace_back(0); // idxs = [0, 1, ..., N-1, 0]
@@ -249,9 +243,6 @@ void main_driver(const char* argv) {
       break;
     case 7:
       checkpointRestart(start_time, hydrovs, fold, gold, ba, dm); start_time--; //start_time is increased by 1 when checkpoint restart is done.
-      #if FIXREF
-      reference.Copy(reference, hydrovs, 0, 0, 2, nghost); // need 2 ghost cells
-      #endif
       break;
     default:
       Print() << "Initial condition specified does not exist. Please enter a difference choice" << std::endl;
@@ -269,11 +260,7 @@ void main_driver(const char* argv) {
 
   // TIMESTEP
   for (int step=start_time; step <= nsteps; ++step) {
-    #if FIXREF
-      LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, reference, step);
-    #else
       LBM_timestep(geom, fold, gold, fnew, gnew, hydrovs, noise, step);
-    #endif
     structFact.FortStructure(hydrovs);
 
     if (hydrovars_int > 0 && step%hydrovars_int == 0 && step >= dump_start){
