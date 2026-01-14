@@ -62,13 +62,15 @@ inline void ReadInput() {
   
   // Initial condition setup
   pp.query("init_cond", init_cond);
-  pp.query("C1", C1); // Proportion of C1 in system. Only used for init_cond = 0 (mixed system)
-  // Droplet properties when using init_cond = 2(droplet), 3(cylinder)
+  // init_cond = 0: mixture
+  // init_cond = 1: flat interface in yz plane
+  // init_cond = 2: Droplet of C1 in the center of the box
+  // init_cond = 3: Cylinder of C1 whose axis is in the z-direction
   pp.query("droplet_radius_prop", droplet_radius_prop);
-  pp.query("phi_in", phi_in);
-  pp.query("phi_out", phi_out);
-  pp.query("rho_in", rho_in);
-  pp.query("rho_out", rho_out);
+  pp.query("C1_in", C1_in); // used for init_cond = 0, 2, 3
+  pp.query("C1_out", C1_out); // used for init_cond = 2, 3
+  pp.query("C2_in", C2_in); // used for init_cond = 0, 2, 3
+  pp.query("C2_out", C2_out); // used for init_cond = 2, 3
   pp.query("tau_r", tau_r);
   pp.query("tau_p", tau_p);
 

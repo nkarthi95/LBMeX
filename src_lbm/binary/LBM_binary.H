@@ -2,6 +2,7 @@
 #define LBM_H_
 
 #include "LBM_d3q19.H"
+#include <cassert>
 
 const int ncons = 2 + AMREX_SPACEDIM; // number of conserved variables (2 scalar fields + velocity)
 const int ndof = 2*nvel; // number of degrees of freedom
@@ -9,11 +10,10 @@ const int ndof = 2*nvel; // number of degrees of freedom
 /*Default initial conditions*/
 AMREX_GPU_MANAGED int init_cond = 0;
 AMREX_GPU_MANAGED Real droplet_radius_prop = 0.3;
-AMREX_GPU_MANAGED Real C1 = 0.5;
-AMREX_GPU_MANAGED Real phi_in = 0.0;
-AMREX_GPU_MANAGED Real phi_out = 0.0;
-AMREX_GPU_MANAGED Real rho_in = 1.0;
-AMREX_GPU_MANAGED Real rho_out = 1.0;
+AMREX_GPU_MANAGED Real C1_in = 0.5;
+AMREX_GPU_MANAGED Real C2_in = 0.5;
+AMREX_GPU_MANAGED Real C1_out = 0.5;
+AMREX_GPU_MANAGED Real C2_out = 0.5;
 
 // time stepping
 AMREX_GPU_MANAGED int fluctuation_start = 0;
@@ -27,29 +27,6 @@ AMREX_GPU_MANAGED Real T = 0.095;
 AMREX_GPU_MANAGED Real kappa = 0.01;
 AMREX_GPU_MANAGED Real Gamma = 1.0;
 
-// thermodynamic model coexistence phi0
-inline Real get_phi0(Real chi, Real T){
-  const Real ratio = chi/T;
-  Real phi0 = 0.0;
-  if(ratio <= 2.27){
-    phi0 = sqrt(3. - 6./ratio);}
-  else if (ratio <= 4.152){
-    phi0 = -0.133*pow(ratio, 2.) + 1.030*ratio - 1.039;}
-  else{
-    phi0 = 0.0248*ratio + 0.863;}
-
-  if(phi0 > 1){phi0 = 0.99;}
-  return phi0;
-}
-
-// thermodynamic model interface width
-inline Real get_xi(Real c1, Real chi, Real T, Real kappa){
-  const Real ratio = chi/T;
-  const Real term1 = 2.*sqrt(kappa/ratio);
-  const Real term2 = sqrt(-1. - (2.*log(4.*c1*(1-c1)))/(ratio*pow(1. - 2.*c1, 2)));
-  return term1/term2;
-}
-
 inline GpuArray<Real,3> get_thermodynamic_params(const Real rho, const Real chi, const Real T, const Real kappa){
   GpuArray<Real,3> out;
   const Real Tc = chi/2.;
@@ -61,7 +38,6 @@ inline GpuArray<Real,3> get_thermodynamic_params(const Real rho, const Real chi,
   out[2] = sqrt(2.*kappa/gamma)/out[0];              // alpha
   return out;
 }
-// rhol+0.5*(rhoh-rhol)*(1+np.tanh((R-np.sqrt(r**2))/(alpha/2)))
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 RealVect gradient(int x, int y, int z, const Array4<Real>& field, int icomp) {
@@ -467,15 +443,15 @@ inline void LBM_timestep(const Geometry& geom,
 inline void LBM_init_mixture(MultiFab& mf,
 			     MultiFab& mg,
 			     MultiFab& hydrovs) {
-  // const Real C1 = 0.5;
-  const Real C2 = 1.0 - C1;
+  assert(std::abs(C1_in + C2_in - 1.0) <= 1e-7 && "Total density of C1 + C2 differs from reference density");
+
   for (MFIter mfi(mf); mfi.isValid(); ++mfi) {
     const Box& valid_box = mfi.validbox();
     const Array4<Real>& f = mf.array(mfi);
     const Array4<Real>& g = mg.array(mfi);
     ParallelForRNG(valid_box, [=] AMREX_GPU_DEVICE(int x, int y, int z, RandomEngine const& engine) {
-      const Real rho = C1 + C2;
-      const Real phi = (C1-C2);
+      const Real rho = C1_in + C2_in;
+      const Real phi = (C1_in - C2_in);
       for (int i=0; i<nvel; i++) {
         f(x,y,z,i) = w[i]*rho;
         g(x,y,z,i) = w[i]*phi+RandomNormal(0., 0.0001, engine);
@@ -491,8 +467,8 @@ inline void LBM_init_flat_interface(const Geometry& geom,
 				    MultiFab& mg,
 				    MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
-  const Real rho = 1.0;
-  const GpuArray<Real, 3> params = get_thermodynamic_params(rho, chi, T, kappa); //phi0, sigma, alpha
+  const Real rho0 = 1.0;
+  const GpuArray<Real, 3> params = get_thermodynamic_params(rho0, chi, T, kappa); //phi0, sigma, alpha
   const Real& phi0 = params[0];
   const Real& alpha = params[2];
 
@@ -503,7 +479,7 @@ inline void LBM_init_flat_interface(const Geometry& geom,
     const Real rx = x-box[0]/2;
         Real phi = phi0*tanh((rx + 0.5)/(alpha/2.));
         for (int i=0; i<nvel; i++) {
-          f[nbx](x,y,z,i) = w[i]*rho;
+          f[nbx](x,y,z,i) = w[i]*rho0;
           g[nbx](x,y,z,i) = w[i]*phi;
         }
       });
@@ -518,32 +494,19 @@ inline void LBM_init_droplet(const Real r,
 			     MultiFab& hydrovs) {
   const IntVect box = geom.Domain().length();
   const Real V_box = static_cast<Real>(box[0]*box[1]*box[2]);
-
   const Real R = r*box[0];
-  const Real V_sph = 4./3.*M_PI*pow(R, 3);
 
-  // const Real rho_out = 1.0;
-  const GpuArray<Real, 3> params = get_thermodynamic_params(1.0, chi, T, kappa); //phi0, sigma, alpha
-  // Print() << "phi0:" << params[0] << ", sigma:" << params[1] << ", alpha:" << params[2] << std::endl;
+  const Real rho0 = 1.0;
+  const GpuArray<Real, 3> params = get_thermodynamic_params(rho0, chi, T, kappa); //phi0, sigma, alpha
+  const Real& phi0 = params[0];
   const Real& alpha = params[2];
-
-  Real A, B;
-  if (phi_in == 0.0 && phi_out == 0.0){
-      // values picked after some trial and error to minimize equilibration time
-      phi_in = params[0]*1.02; 
-      phi_out = -params[0]*0.98; 
+  
+  if (C1_in == 0.5 && C1_out == 0.5){
+    C1_in = (rho0 + phi0)/2.0; C1_out = (rho0 - phi0)/2.0;
   }
-  Print() << "phi_in:" << phi_in << ", rho_out:" << phi_out << std::endl;
-  A = (phi_in + phi_out)/2.; // difference between high and low values
-  B = (phi_in - phi_out)/2.; // mean of high and low values
-
-  if (rho_in == 1.0 && rho_out == 1.0){
-    const Real drho = (2.*params[1])/(R*(cs2 + T));
-    rho_out = (V_box - V_sph*drho)/V_box;
-    rho_in = rho_out + drho;
+  if (C2_in == 0.5 && C2_out == 0.5){
+    C2_in = rho0-C1_in; C2_out = rho0-C1_out;
   }
-  Print() << "rho_in:" << rho_in << ", rho_out:" << rho_out << std::endl;
-
   auto const & f = mf.arrays();
   auto const & g = mg.arrays();
   GpuArray<Real,3> dx = geom.CellSizeArray();
@@ -557,13 +520,12 @@ inline void LBM_init_droplet(const Real r,
         const Real r2 = rx*rx+ry*ry+rz*rz;
     #endif
         const Real r = sqrt(r2);
-        const Real phi = A + B*(tanh((R-r)/(alpha/2)));
-        const Real rho = phi>0 ? rho_in : rho_out;
-
+        // rhol+0.5*(rhoh-rhol)*(1+np.tanh((R-np.sqrt(r**2))/(alpha/2)))
+        const Real C1 = C1_out + 0.5*(C1_in - C1_out)*(1 + tanh((R - r)/(alpha/2)));
+        const Real C2 = C2_out + 0.5*(C2_in - C2_out)*(1 + tanh((R - r)/(alpha/2)));
         for (int i=0; i<nvel; i++) {
-          // condition ? expression_if_true : expression_if_false;
-          f[nbx](x,y,z,i) = w[i]*rho;
-          g[nbx](x,y,z,i) = w[i]*phi;
+          f[nbx](x,y,z,i) = w[i]*(C1 + C2);
+          g[nbx](x,y,z,i) = w[i]*(C1 - C2);
         }
 
       });
@@ -578,17 +540,16 @@ inline void LBM_init_cylinder(const Real r,
   const IntVect box = geom.Domain().length();
   const Real R = r*box[0];
 
-  const Real rho = 1.0;
-  const GpuArray<Real, 3> params = get_thermodynamic_params(rho, chi, T, kappa); //phi0, sigma, alpha
+  const Real rho0 = 1.0;
+  const GpuArray<Real, 3> params = get_thermodynamic_params(rho0, chi, T, kappa); //phi0, sigma, alpha
+  const Real& phi0 = params[0];
   const Real& alpha = params[2];
-  Real A, B;
-  if (phi_in > 0.0 && phi_out < 0.0) {
-      A = (phi_in + phi_out)/2.; // difference between high and low values
-      B = (phi_in - phi_out)/2.; // mean of high and low values
+
+  if (C1_in == 0.5 && C1_out == 0.5){
+    C1_in = (rho0 + phi0)/2.0; C1_out = (rho0 - phi0)/2.0;
   }
-  else{
-    B = params[0];
-    A = 0.0;
+  if (C2_in == 0.5 && C2_out == 0.5){
+    C2_in = rho0-C1_in; C2_out = rho0-C1_out;
   }
   
   auto const & f = mf.arrays();
@@ -597,13 +558,13 @@ inline void LBM_init_cylinder(const Real r,
   ParallelFor(mf, IntVect(0), [=] AMREX_GPU_DEVICE(int nbx, int x, int y, int z) {
     const Real rx = x-box[0]/2;
     const Real ry = y-box[1]/2;
-
     const Real r = sqrt(ry*ry + rx*rx);
-    const Real phi = A + B*(tanh((R-r)/(alpha/2)));
 
+    const Real C1 = C1_out + 0.5*(C1_in - C1_out)*(1 + tanh((R - r)/(alpha/2)));
+    const Real C2 = C2_out + 0.5*(C2_in - C2_out)*(1 + tanh((R - r)/(alpha/2)));
     for (int i=0; i<nvel; i++) {
-      f[nbx](x,y,z,i) = w[i]*rho;
-      g[nbx](x,y,z,i) = w[i]*phi;
+      f[nbx](x,y,z,i) = w[i]*(C1 + C2);
+      g[nbx](x,y,z,i) = w[i]*(C1 - C2);
     }
   });
   hydrovars(mf, mg, hydrovs);

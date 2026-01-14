@@ -1,31 +1,30 @@
 # box parameters
-nx = 64
-ny = 64
-nz = 64
+nx = 32
+ny = 32
+nz = 32
 
 # box mpi decomposition parameters
 max_grid_size_x = 32
 max_grid_size_y = 32
-max_grid_size_z = 32
+max_grid_size_z = 16
 
 # system setup
-init_cond = 2
-# only for mixed system (init_cond = 0)
-C1 = 0.5
-# only for droplet and cylinder system (init_cond = 2 or 3)
-droplet_radius_prop = 0.1011
-phi_in = 0.395
-phi_out = -0.338
-rho_in = 1.0
-rho_out = 1.0
+init_cond = 0
+droplet_radius_prop = 0.202 # only for droplet system
+C1_in = 0.5 # used in init_cond = mixture, droplet and cylinder
+# For init_cond = mixture, controls proportion of C1 in mixture
+C1_out = 0.5 # used in init_cond = droplet and cylinder
+C2_in = 0.5 # used in init_cond = mixture, droplet and cylinder
+# For init_cond = mixture, controls proportion of C2 in mixture
+C2_out = 0.5 # used in init_cond = droplet and cylinder
 tau_r = 1.0
 tau_p = 1.0
 
 # timestepping options
-nsteps = 20000
+nsteps = 10000
 n_checkpoint = 0
 restore_string = 0
-fluctuation_start = 100
+fluctuation_start = 0
 
 # output parameters
 nvars_dump = 2
@@ -33,7 +32,7 @@ dump_start = 0
 hydrovars_int = 1000
 SF_int = 0
 distribution_int = 0
-analysis_int = 10
+analysis_int = 0
 analysis_file = "droplet_analysis.csv"
 page_hold = 1000
 
